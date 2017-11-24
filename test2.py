@@ -1,5 +1,6 @@
 from collections import namedtuple
 from tabulate import tabulate
+import sys
 
 type_in = 0
 type_hidden = 1
@@ -27,6 +28,8 @@ class Node():
     def detect_recurrence(self):
         # recurrent output node
         if self.type == type_out:
+
+            # we assume that all output nodes must be recurrent
             if len(self.output_nodes) > 0:
                 for node in self.output_nodes:
                     node.recur_input_node(self)
@@ -34,6 +37,21 @@ class Node():
                 self.output_nodes = []
 
         # recurrent hidden nodes
+        if self.type == type_hidden:
+
+            # check if node is in inputs
+            for node1 in self.output_nodes:
+                if node1 in self.input_nodes:
+
+                    # check if that node, has an output to this node
+                    for node2 in node1.output_nodes:
+                        if node2.id == self.id:
+                            # remove input node in-connection
+                            self.input_nodes.remove(node1)
+
+                            # shuffle output node to recurrent
+                            node1.output_nodes.remove(self)
+                            node1.recurrent_out.append(self)
 
 
 Connection = namedtuple('Collection',
@@ -47,33 +65,32 @@ class Network():
     def example_nodes(self):
         self.nodes.append(Node(1,type_in))
         self.nodes.append(Node(2,type_in))
-        self.nodes.append(Node(3,type_in))
-        self.nodes.append(Node(4,type_out))
-        self.nodes.append(Node(5,type_hidden))
+        self.nodes.append(Node(3,type_hidden))
+        self.nodes.append(Node(4,type_hidden))
+        self.nodes.append(Node(5,type_out))
 
     def example_connections(self):
-        c1 = Connection(1, 4, 0.7, True, 1)
-        c2 = Connection(2, 4, -0.5, False, 1)
+        c1 = Connection(1, 3, 0.7, True, 1)
+        c2 = Connection(2, 3, 0.5, True, 1)
         c3 = Connection(3, 4, 0.5, True, 1)
-        c4 = Connection(2, 5, 0.2, True, 1)
-        c5 = Connection(5, 4, 0.4, True, 1)
-        c6 = Connection(1, 5, 0.6, True, 1)
-        c7 = Connection(4, 5, 0.6, True, 1)
+        c4 = Connection(4, 5, 0.2, True, 1)
+        c5 = Connection(4, 3, 0.4, True, 1)
 
         self.connections.append(c1)
         self.connections.append(c2)
         self.connections.append(c3)
         self.connections.append(c4)
         self.connections.append(c5)
-        self.connections.append(c6)
-        self.connections.append(c7)
 
     def find_node(self, node_id):
+        # TODO: sort when copying from genome,
+        #       then index into the array/dict instead.
         for node in self.nodes:
             if node.id == node_id:
                 return node
 
     def build(self):
+        # build all neuron connections
         for connection in self.connections:
             if connection.enabled == True:
                 # find corresponding node
@@ -84,9 +101,15 @@ class Network():
                 input_node.new_output(output_node)
                 output_node.new_input(input_node)
 
+        print('Initial Build')
+        print(self)
+
         # after all connections are done, detect cycles
         for node in self.nodes:
             node.detect_recurrence()
+
+        print('After recurrence')
+        print(self)
 
     def __str__(self):
         # shortcut
@@ -141,13 +164,12 @@ net.example_connections()
 
 # Create Network
 net.build()
-print(net)
 
 # at this point this basic idea is that
 # 1) we set all inputs and outputs in the nodes directly, based on the connections
 # 2) we then detect recurrent nodes:
 #   a) if a node is an output, every output of that node must be recurrent
-#   b) if a node is a hidden node, (TODO)
+#   b) if a node is a hidden node, swap the two associated nodes contents
 #   c) if a node is an input, we assume it cannot recur
 # 3) after detecting recurrent nodes,
 #   a) we place the output nodes in the recurrent output nodes
