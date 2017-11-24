@@ -22,22 +22,19 @@ class Node():
     def new_output(self, output_node):
         self.output_nodes.append(output_node)
 
-    def recur_input_node(self, input_node):
-        self.input_nodes.remove(input_node)
-
     def detect_recurrence(self):
-        # recurrent output node
+        # recurrence with output nodes
         if self.type == type_out:
 
             # we assume that all output nodes must be recurrent
             if len(self.output_nodes) > 0:
                 for node in self.output_nodes:
-                    node.recur_input_node(self)
+                    node.input_nodes.remove(self)
                     self.recurrent_out.append(node)
                 self.output_nodes = []
 
-        # recurrent hidden nodes
-        if self.type == type_hidden:
+        # recurrence with hidden nodes
+        elif self.type == type_hidden:
 
             # check if node is in inputs
             for node1 in self.output_nodes:
@@ -53,6 +50,18 @@ class Node():
                             node1.output_nodes.remove(self)
                             node1.recurrent_out.append(self)
 
+        # recurrence with input nodes
+        elif self.type == type_in:
+
+            # we assume that all input nodes must be recurrent
+            if len(self.input_nodes) > 0:
+                for node in self.input_nodes:
+                    # shuffle output node to recurrent
+                    node.output_nodes.remove(self)
+                    node.recurrent_out.append(self)
+
+                    # remove node connection
+                    self.input_nodes.remove(node)
 
 Connection = namedtuple('Collection',
                         ['input', 'output', 'weight', 'enabled', 'innovation'])
@@ -65,22 +74,28 @@ class Network():
     def example_nodes(self):
         self.nodes.append(Node(1,type_in))
         self.nodes.append(Node(2,type_in))
-        self.nodes.append(Node(3,type_hidden))
+        self.nodes.append(Node(3,type_in))
         self.nodes.append(Node(4,type_hidden))
-        self.nodes.append(Node(5,type_out))
+        self.nodes.append(Node(5,type_hidden))
+        self.nodes.append(Node(6,type_hidden))
+        self.nodes.append(Node(7,type_out))
+        self.nodes.append(Node(8,type_out))
+        self.nodes.append(Node(9,type_out))
 
     def example_connections(self):
-        c1 = Connection(1, 3, 0.7, True, 1)
-        c2 = Connection(2, 3, 0.5, True, 1)
-        c3 = Connection(3, 4, 0.5, True, 1)
-        c4 = Connection(4, 5, 0.2, True, 1)
-        c5 = Connection(4, 3, 0.4, True, 1)
-
-        self.connections.append(c1)
-        self.connections.append(c2)
-        self.connections.append(c3)
-        self.connections.append(c4)
-        self.connections.append(c5)
+        self.connections.append(Connection(1, 4, 0.5, True, 1))
+        self.connections.append(Connection(2, 4, 0.5, True, 1))
+        self.connections.append(Connection(2, 5, 0.5, True, 1))
+        self.connections.append(Connection(3, 5, 0.5, True, 1))
+        self.connections.append(Connection(4, 3, 0.5, True, 1))
+        self.connections.append(Connection(4, 6, 0.5, True, 1))
+        self.connections.append(Connection(5, 1, 0.5, True, 1))
+        self.connections.append(Connection(5, 6, 0.5, True, 1))
+        self.connections.append(Connection(6, 4, 0.5, True, 1))
+        self.connections.append(Connection(6, 5, 0.5, True, 1))
+        self.connections.append(Connection(6, 7, 0.5, True, 1))
+        self.connections.append(Connection(6, 8, 0.5, True, 1))
+        self.connections.append(Connection(6, 9, 0.5, True, 1))
 
     def find_node(self, node_id):
         # TODO: sort when copying from genome,
