@@ -1,4 +1,5 @@
 from collections import namedtuple
+from tabulate import tabulate
 
 type_in = 0
 type_hidden = 1
@@ -38,7 +39,7 @@ class Node():
 Connection = namedtuple('Collection',
                         ['input', 'output', 'weight', 'enabled', 'innovation'])
 
-class Agent():
+class Network():
     def __init__(self):
         self.nodes = []
         self.connections = []
@@ -72,7 +73,7 @@ class Agent():
             if node.id == node_id:
                 return node
 
-    def connect_nodes(self):
+    def build(self):
         for connection in self.connections:
             if connection.enabled == True:
                 # find corresponding node
@@ -87,31 +88,60 @@ class Agent():
         for node in self.nodes:
             node.detect_recurrence()
 
+    def __str__(self):
+        # shortcut
+        nodes = self.nodes
+
+        # tabulate headers
+        headers = ['ID', 'IN', 'OUT', 'R']
+
+        # all node id's
+        node_ids = [x.id for x in nodes]
+
+        # all respective node inputs
+        node_inputs = []
+        for node in nodes:
+            inputs = []
+            for node_in in node.input_nodes:
+                inputs.append(node_in.id)
+            node_inputs.append(inputs)
+
+        # all respective node outputs
+        node_outputs = []
+        for node in nodes:
+            outputs = []
+            for node_out in node.output_nodes:
+                outputs.append(node_out.id)
+            node_outputs.append(outputs)
+
+        # all respective node recurrents
+        recurrents = []
+        for node in nodes:
+            recur = []
+            for node_rec in node.recurrent_out:
+                recur.append(node_rec.id)
+            recurrents.append(recur)
+
+        # swizzle into mega list
+        swizzle = []
+        for i in range(len(nodes)):
+            current_node_info = []
+            current_node_info.append([node_ids[i]])
+            current_node_info.append(node_inputs[i])
+            current_node_info.append(node_outputs[i])
+            current_node_info.append(recurrents[i])
+            swizzle.append(current_node_info)
+
+        return tabulate(swizzle, headers=headers, tablefmt="fancy_grid")
+
 # Create genome
-agent = Agent()
-agent.example_nodes()
-agent.example_connections()
+net = Network()
+net.example_nodes()
+net.example_connections()
 
 # Create Network
-agent.connect_nodes()
-
-for node in agent.nodes:
-    # id and input nodes
-    print("ID {} | in: ".format(node.id), end='')
-    for input_node in node.input_nodes:
-        print(input_node.id, end=' ')
-
-    # output nodes
-    print("\tout: ", end='')
-    for output_node in node.output_nodes:
-        print(output_node.id, end=' ')
-
-    # recurrent output nodes
-    print("\trec: ", end='')
-    for rec_node in node.recurrent_out:
-        print(rec_node.id, end=' ')
-
-    print()
+net.build()
+print(net)
 
 # at this point this basic idea is that
 # 1) we set all inputs and outputs in the nodes directly, based on the connections
