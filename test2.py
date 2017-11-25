@@ -72,30 +72,54 @@ class Network():
         self.connections = []
 
     def example_nodes(self):
+        # basic
         self.nodes.append(Node(1,type_in))
         self.nodes.append(Node(2,type_in))
         self.nodes.append(Node(3,type_in))
         self.nodes.append(Node(4,type_hidden))
         self.nodes.append(Node(5,type_hidden))
         self.nodes.append(Node(6,type_hidden))
-        self.nodes.append(Node(7,type_out))
-        self.nodes.append(Node(8,type_out))
-        self.nodes.append(Node(9,type_out))
+        self.nodes.append(Node(7,type_hidden))
+        self.nodes.append(Node(8,type_hidden))
+        self.nodes.append(Node(9,type_hidden))
+
+        # addon
+        self.nodes.append(Node(10,type_out))
+        self.nodes.append(Node(11,type_out))
+        self.nodes.append(Node(12,type_out))
 
     def example_connections(self):
+        # basic
         self.connections.append(Connection(1, 4, 0.5, True, 1))
+        self.connections.append(Connection(1, 5, 0.5, True, 1))
         self.connections.append(Connection(2, 4, 0.5, True, 1))
         self.connections.append(Connection(2, 5, 0.5, True, 1))
+        self.connections.append(Connection(2, 6, 0.5, True, 1))
         self.connections.append(Connection(3, 5, 0.5, True, 1))
-        self.connections.append(Connection(4, 3, 0.5, True, 1))
-        self.connections.append(Connection(4, 6, 0.5, True, 1))
-        self.connections.append(Connection(5, 1, 0.5, True, 1))
-        self.connections.append(Connection(5, 6, 0.5, True, 1))
-        self.connections.append(Connection(6, 4, 0.5, True, 1))
-        self.connections.append(Connection(6, 5, 0.5, True, 1))
-        self.connections.append(Connection(6, 7, 0.5, True, 1))
+        self.connections.append(Connection(3, 6, 0.5, True, 1))
+        self.connections.append(Connection(4, 7, 0.5, True, 1))
+        self.connections.append(Connection(4, 8, 0.5, True, 1))
+        self.connections.append(Connection(4, 1, 0.5, True, 1))
+        self.connections.append(Connection(5, 7, 0.5, True, 1))
+        self.connections.append(Connection(5, 8, 0.5, True, 1))
+        self.connections.append(Connection(5, 9, 0.5, True, 1))
         self.connections.append(Connection(6, 8, 0.5, True, 1))
         self.connections.append(Connection(6, 9, 0.5, True, 1))
+        self.connections.append(Connection(6, 3, 0.5, True, 1))
+        self.connections.append(Connection(7, 4, 0.5, True, 1))
+        self.connections.append(Connection(9, 6, 0.5, True, 1))
+
+        # addon
+        self.connections.append(Connection(7, 10, 0.5, True, 1))
+        self.connections.append(Connection(7, 11, 0.5, True, 1))
+        self.connections.append(Connection(8, 10, 0.5, True, 1))
+        self.connections.append(Connection(8, 11, 0.5, True, 1))
+        self.connections.append(Connection(8, 12, 0.5, True, 1))
+        self.connections.append(Connection(9, 11, 0.5, True, 1))
+        self.connections.append(Connection(9, 12, 0.5, True, 1))
+        self.connections.append(Connection(10, 7, 0.5, True, 1))
+        self.connections.append(Connection(12, 9, 0.5, True, 1))
+        self.connections.append(Connection(11, 5, 0.5, True, 1))
 
     def find_node(self, node_id):
         # TODO: sort when copying from genome,
