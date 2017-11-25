@@ -11,16 +11,17 @@ class Node():
         self.id = idx
         self.type = type
 
+        self.cache = []
+        self.output = 0
+        self.ready = False
+
+        self.input_counter = 0
         self.input_nodes = []
+
+        self.weights = []
         self.output_nodes = []
 
         self.recurrent_out = []
-
-    def new_input(self, input_node):
-        self.input_nodes.append(input_node)
-
-    def new_output(self, output_node):
-        self.output_nodes.append(output_node)
 
     def detect_recurrence(self):
         # recurrence with output nodes
@@ -63,6 +64,26 @@ class Node():
                     # remove node connection
                     self.input_nodes.remove(node)
 
+    def forward(self):
+        # if we've received all inputs
+        if len(self.cache) >= self.input_counter:
+
+            # forward our output to all nodes
+            # TODO big ol sigmoid or relu
+            output = sum(self.cache)
+            for i, node in enumerate(self.output_nodes):
+                node.cache.append(output * self.weights[i])
+                node.input_counter += 1
+
+            # store the output for recurrent pass
+            self.output = output
+
+            # signal that this node has no jobs
+            self.ready = True
+
+    def r_forward(self):
+        pass
+
 Connection = namedtuple('Collection',
                         ['input', 'output', 'weight', 'enabled', 'innovation'])
 
@@ -72,54 +93,19 @@ class Network():
         self.connections = []
 
     def example_nodes(self):
-        # basic
         self.nodes.append(Node(1,type_in))
         self.nodes.append(Node(2,type_in))
-        self.nodes.append(Node(3,type_in))
-        self.nodes.append(Node(4,type_hidden))
-        self.nodes.append(Node(5,type_hidden))
-        self.nodes.append(Node(6,type_hidden))
-        self.nodes.append(Node(7,type_hidden))
-        self.nodes.append(Node(8,type_hidden))
-        self.nodes.append(Node(9,type_hidden))
-
-        # addon
-        self.nodes.append(Node(10,type_out))
-        self.nodes.append(Node(11,type_out))
-        self.nodes.append(Node(12,type_out))
+        self.nodes.append(Node(3,type_out))
+        self.nodes.append(Node(4,type_out))
 
     def example_connections(self):
-        # basic
-        self.connections.append(Connection(1, 4, 0.5, True, 1))
-        self.connections.append(Connection(1, 5, 0.5, True, 1))
-        self.connections.append(Connection(2, 4, 0.5, True, 1))
-        self.connections.append(Connection(2, 5, 0.5, True, 1))
-        self.connections.append(Connection(2, 6, 0.5, True, 1))
-        self.connections.append(Connection(3, 5, 0.5, True, 1))
-        self.connections.append(Connection(3, 6, 0.5, True, 1))
-        self.connections.append(Connection(4, 7, 0.5, True, 1))
-        self.connections.append(Connection(4, 8, 0.5, True, 1))
-        self.connections.append(Connection(4, 1, 0.5, True, 1))
-        self.connections.append(Connection(5, 7, 0.5, True, 1))
-        self.connections.append(Connection(5, 8, 0.5, True, 1))
-        self.connections.append(Connection(5, 9, 0.5, True, 1))
-        self.connections.append(Connection(6, 8, 0.5, True, 1))
-        self.connections.append(Connection(6, 9, 0.5, True, 1))
-        self.connections.append(Connection(6, 3, 0.5, True, 1))
-        self.connections.append(Connection(7, 4, 0.5, True, 1))
-        self.connections.append(Connection(9, 6, 0.5, True, 1))
+        # base connections
+        self.connections.append(Connection(1,3,0.5,True,1))
+        self.connections.append(Connection(1,4,0.5,True,1))
+        self.connections.append(Connection(2,3,0.5,True,1))
+        self.connections.append(Connection(2,4,0.5,True,1))
 
-        # addon
-        self.connections.append(Connection(7, 10, 0.5, True, 1))
-        self.connections.append(Connection(7, 11, 0.5, True, 1))
-        self.connections.append(Connection(8, 10, 0.5, True, 1))
-        self.connections.append(Connection(8, 11, 0.5, True, 1))
-        self.connections.append(Connection(8, 12, 0.5, True, 1))
-        self.connections.append(Connection(9, 11, 0.5, True, 1))
-        self.connections.append(Connection(9, 12, 0.5, True, 1))
-        self.connections.append(Connection(10, 7, 0.5, True, 1))
-        self.connections.append(Connection(12, 9, 0.5, True, 1))
-        self.connections.append(Connection(11, 5, 0.5, True, 1))
+        # recurrent connections
 
     def find_node(self, node_id):
         # TODO: sort when copying from genome,
@@ -137,8 +123,9 @@ class Network():
                 output_node = self.find_node(connection.output)
 
                 # update connection
-                input_node.new_output(output_node)
-                output_node.new_input(input_node)
+                input_node.weights.append(connection.weight)
+                input_node.output_nodes.append(output_node)
+                output_node.input_nodes.append(input_node)
 
         print('Initial Build')
         print(self)
@@ -149,6 +136,40 @@ class Network():
 
         print('After recurrence')
         print(self)
+
+    def forward(self, x):
+        # get input and output nodes
+        input_nodes = []
+        output_nodes = []
+        for node in self.nodes:
+            if node.type == type_in:
+                input_nodes.append(node)
+            elif node.type == type_out:
+                output_nodes.append(node)
+
+        # split x to feed to input neurons
+        for i, node in enumerate(input_nodes):
+            node.cache.append(x[i])
+
+        # begin forward pass 1 - propagation
+        while True:
+
+            # forward propagate some nodes
+            for node in self.nodes:
+                node.forward()
+
+            # check if the output nodes are ready
+            num_ready = 0
+            for node in output_nodes:
+                if node.ready == True:
+                    num_ready += 1
+            if num_ready == len(output_nodes):
+                break
+
+        # begin forward pass 2 - recurrence
+
+        # return output
+        return [sum(x.cache) for x in output_nodes]
 
     def __str__(self):
         # shortcut
@@ -203,8 +224,9 @@ net.example_connections()
 
 # Create Network
 net.build()
+print(net.forward([1,1]))
 
-# at this point this basic idea is that
+# at this point the basic idea is that
 # 1) we set all inputs and outputs in the nodes directly, based on the connections
 # 2) we then detect recurrent nodes:
 #   a) if a node is an output, every output of that node must be recurrent
