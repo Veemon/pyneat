@@ -1,11 +1,24 @@
 from collections import namedtuple
 from tabulate import tabulate
+from math import exp
 import sys
 
+# Activation Functions
+def sigmoid(x):
+    return 2 / (1 + exp(-4.9*x)) - 1
+
+def relu(x):
+    return x if x > 0 else 0
+
+# Node and Network Builders
 type_in = 0
 type_hidden = 1
 type_out = 2
 
+Connection = namedtuple('Collection',
+                        ['input', 'output', 'weight', 'enabled', 'innovation'])
+
+# Nodes - acts like an I/O processor
 class Node():
     def __init__(self, idx, type):
         self.id = idx
@@ -66,46 +79,39 @@ class Node():
 
     def forward(self):
         # if we've received all inputs
-        if len(self.cache) >= self.input_counter:
+        if len(self.cache) >= self.input_counter and self.ready == False:
 
             # forward our output to all nodes
-            # TODO big ol sigmoid or relu
-            output = sum(self.cache)
+            output = sigmoid(sum(self.cache))
             for i, node in enumerate(self.output_nodes):
                 node.cache.append(output * self.weights[i])
                 node.input_counter += 1
 
             # store the output for recurrent pass
             self.output = output
+            self.cache = []
 
             # signal that this node has no jobs
             self.ready = True
+            self.input_counter = 0
 
     def r_forward(self):
-        pass
+        # forward the last output to recurrent connections
+        l = len(self.output_nodes)
+        for i, node in enumerate(self.recurrent_out):
+            node.cache.append(self.output * self.weights[l + i])
 
-Connection = namedtuple('Collection',
-                        ['input', 'output', 'weight', 'enabled', 'innovation'])
+    def reset(self):
+        self.cache = []
+        self.output = 0
+        self.input_counter = 0
+        self.ready = False
 
+# Network - builds the routing between nodes
 class Network():
     def __init__(self):
         self.nodes = []
         self.connections = []
-
-    def example_nodes(self):
-        self.nodes.append(Node(1,type_in))
-        self.nodes.append(Node(2,type_in))
-        self.nodes.append(Node(3,type_out))
-        self.nodes.append(Node(4,type_out))
-
-    def example_connections(self):
-        # base connections
-        self.connections.append(Connection(1,3,0.5,True,1))
-        self.connections.append(Connection(1,4,0.5,True,1))
-        self.connections.append(Connection(2,3,0.5,True,1))
-        self.connections.append(Connection(2,4,0.5,True,1))
-
-        # recurrent connections
 
     def find_node(self, node_id):
         # TODO: sort when copying from genome,
@@ -152,6 +158,7 @@ class Network():
             node.cache.append(x[i])
 
         # begin forward pass 1 - propagation
+        length = len(output_nodes)
         while True:
 
             # forward propagate some nodes
@@ -163,13 +170,23 @@ class Network():
             for node in output_nodes:
                 if node.ready == True:
                     num_ready += 1
-            if num_ready == len(output_nodes):
+            if num_ready == length:
                 break
 
+        # reset node state signals
+        for node in self.nodes:
+            node.ready = False
+
         # begin forward pass 2 - recurrence
+        for node in self.nodes:
+            node.r_forward()
 
         # return output
-        return [sum(x.cache) for x in output_nodes]
+        return [x.output for x in output_nodes]
+
+    def reset(self):
+        for node in self.nodes:
+            node.reset()
 
     def __str__(self):
         # shortcut
@@ -216,30 +233,3 @@ class Network():
             swizzle.append(current_node_info)
 
         return tabulate(swizzle, headers=headers, tablefmt="fancy_grid")
-
-# Create genome
-net = Network()
-net.example_nodes()
-net.example_connections()
-
-# Create Network
-net.build()
-print(net.forward([1,1]))
-
-# at this point the basic idea is that
-# 1) we set all inputs and outputs in the nodes directly, based on the connections
-# 2) we then detect recurrent nodes:
-#   a) if a node is an output, every output of that node must be recurrent
-#   b) if a node is a hidden node, swap the two associated nodes contents
-#   c) if a node is an input, we assume it cannot recur
-# 3) after detecting recurrent nodes,
-#   a) we place the output nodes in the recurrent output nodes
-
-# this essentially creates the network, from here to perform a feed forward pass
-# 0) depack input into respective input nodes
-# 1) cycle through each node
-# ~ Forward Pass 1/2
-# 2) if all the nodes inputs are satisfied, summate the node cache and send this
-#    value to the the nodes outputs
-# ~ Forward Pass 2/2
-# 3) forward the nodes exit value to all recurrent outputs
