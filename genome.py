@@ -1,8 +1,10 @@
 # standard library
+import random
+import sys
+
 from collections import namedtuple
 from enum import Enum
 from math import exp
-import sys
 
 # third-party library
 from tabulate import tabulate
@@ -260,6 +262,17 @@ class Genome:
         self.network = 0
         self.fitness = 0
 
+    def find_neuron(self, neuron_id):
+        for n in self.neurons:
+            if n.id == neuron_id:
+                return n
+
+    def find_connection(self, innovation):
+        # TODO: a lot of linear searches in the codebase
+        for c in self.connections:
+            if c.innovation == innovation:
+                return c
+
     def build(self):
         self.network = Network(self)
         self.network.build()
@@ -271,7 +284,10 @@ class Genome:
         headers = ['Nodes', 'Connections']
         connection_str = [str([x.input, x.output])[1:-1] for x in self.connections]
         for i, connection in enumerate(connection_str):
-            connection_str[i] = connection.replace(',', ' ->')
+            if self.connections[i].enabled == True:
+                connection_str[i] = connection.replace(',', ' ->')
+            else:
+                connection_str[i] = connection.replace(',', ' -x')
 
         swizzle = []
         l_node = len(self.neurons)
@@ -295,7 +311,61 @@ class Genome:
 def crossover(g1, g2):
     child = Genome()
 
-    #
+    # find ending of lined up genes
+    innovations_1 = [x.innovation for x in g1.connections]
+    innovations_2 = [x.innovation for x in g2.connections]
+    recurring = list(set(innovations_1).intersection(set(innovations_2)))
+
+    # these lined up genes have equal chance
+    for innovation in recurring:
+        # flip a coin
+        choice = g1 if random.uniform(0, 1) > 0.5 else g2
+
+        # inherent gene
+        child.connections.append(choice.find_connection(innovation))
+
+    # now pull disjoint & excess genes
+    if g1.fitness != g2.fitness:
+        # find more fit excess genes
+        if g1.fitness > g2.fitness:
+            choice = g1
+            innovation_choice = innovations_1
+        else:
+            choice = g2
+            innovation_choice = innovations_2
+
+        # inheret
+        remainder = [x for x in innovation_choice if x not in recurring]
+        for innovation in remainder:
+            child.connections.append(choice.find_connection(innovation))
+    else:
+        # inherent all excess genes
+        remainder_1 = [x for x in innovations_1 if x not in recurring]
+        remainder_2 = [x for x in innovations_2 if x not in recurring]
+        for innovation in remainder_1:
+            child.connections.append(g1.find_connection(innovation))
+        for innovation in remainder_2:
+            child.connections.append(g2.find_connection(innovation))
+
+    # grab neurons
+    if g1.fitness != g2.fitness:
+        # inheret more fit nodes
+        choice = g1 if g1.fitness > g2.fitness else g2
+        child = choice.neurons
+    else:
+        # inheret all nodes
+        neurons_1 = [x.id for x in g1.neurons]
+        neurons_2 = [x for x in [x.id for x in g2.neurons] if x not in neurons_1]
+        for neuron_id in neurons_1:
+            child.neurons.append(g1.find_neuron(neuron_id))
+        for neuron_id in neurons_2:
+            child.neurons.append(g2.find_neuron(neuron_id))
+
+    # sort
+    child.neurons.sort(key=lambda x: x.id)
+    child.connections.sort(key=lambda x: x.innovation)
+
+    return child
 
 def mutate(g):
     pass
