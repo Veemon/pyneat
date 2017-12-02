@@ -252,6 +252,7 @@ class Network():
 
 
 
+# Genome - Network Blueprint
 class Genome:
     def __init__(self):
         # information
@@ -308,6 +309,7 @@ class Genome:
 
         return tabulate(swizzle, headers=headers)
 
+# Creates offspring between two genomes
 def crossover(g1, g2):
     child = Genome()
 
@@ -367,6 +369,7 @@ def crossover(g1, g2):
 
     return child
 
+# Mutates all weights with chance
 def mutate_weights(g, chance):
     new_connections = []
     for connection in g.connections:
@@ -414,13 +417,40 @@ def mutate_weights(g, chance):
             new_connections.append(connection)
     g.connections = new_connections
 
-
+# Adds a neuron to genome
 def add_node(g):
     pass
 
+# Adds a connection to genome
 def add_connection(g):
-    pass
+    # in -add connection- mutation, a single new connection gene with a random weight is added
+    # connecting two previously unconnected nodes
 
+    # find already connected pairs
+    connected = [[0] for x in g.neurons]
+    for c in g.connections:
+        connected[c.input - 1].append([c.input, c.output])
+    connected = [x[1:] for x in connected]
+
+    # flatten
+    connected = [x for y in connected for x in y]
+
+    # find unconnected pairs
+    unconnected = []
+    for i in range(len(g.neurons)):
+        for j in range(len(g.neurons)):
+            unconnected.append([g.neurons[i].id, g.neurons[j].id])
+    unconnected = [x for x in unconnected if x not in connected]
+
+    # choose 1 at random TODO: add innovation
+    new = random.choice(unconnected)
+    g.connections.append(Connection(new[0],
+                    new[1],
+                    random.uniform(-1,1),
+                    True,
+                    0))
+
+# High level dice-roller for mutations
 def mutate(g, chance):
     # structural versus weight
     if random.uniform(0,1) > 0.5:
@@ -433,6 +463,8 @@ def mutate(g, chance):
                 add_connection(g)
     else:
         mutate_weights(g, chance)
+
+
 
 # setup parent 1
 g1 = Genome()
@@ -449,9 +481,6 @@ g1.connections.append(Connection(3,4,0.5,True,3))
 g1.connections.append(Connection(2,5,0.5,True,4))
 g1.connections.append(Connection(5,4,0.5,True,5))
 g1.connections.append(Connection(1,5,0.5,True,8))
-
-# print('~ Parent A ~')
-# print(g1,'\n')
 
 # setup parent 2
 g2 = Genome()
@@ -473,23 +502,61 @@ g2.connections.append(Connection(6,4,0.5,True,7))
 g2.connections.append(Connection(3,5,0.5,True,9))
 g2.connections.append(Connection(1,6,0.5,True,10))
 
-# print('~ Parent B ~')
-# print(g2,'\n')
-
 # crossover with equal fitness
 g3 = crossover(g1,g2)
-# print('~ Child crossover ~')
-# print(g3,'\n')
 
-# mutate weight
-# print('~ Child Initial ~')
-# for c in g3.connections:
-#     print(c)
-# print()
-#
-# mutate_weights(g3, chance=1.0)
-#
-# print('~ Child mutation ~')
-# for c in g3.connections:
-#     print(c)
-# print()
+# Test Crossover
+if False:
+    print('~ Parent A ~')
+    print(g1,'\n')
+
+    print('~ Parent B ~')
+    print(g2,'\n')
+
+    print('~ Child crossover ~')
+    print(g3,'\n')
+
+# Test Weight Mutation
+if False:
+    print('~ Child Initial ~')
+    for c in g3.connections:
+        print(c)
+    print()
+
+    # mutate weight
+    mutate_weights(g3, chance=1.0)
+
+    print('~ Child mutation ~')
+    for c in g3.connections:
+        print(c)
+    print()
+
+# Test Node Mutation
+if False:
+    print('~ Child Initial ~')
+    for n in g3.neurons:
+        print(n)
+    print()
+
+    # mutate weight
+    add_node(g3)
+
+    print('~ Child mutation ~')
+    for n in g3.n:
+        print(n)
+    print()
+
+# Test Connection Mutation
+if True:
+    print('~ Child Initial ~')
+    for c in g3.connections:
+        print(c)
+    print()
+
+    # mutate weight
+    add_connection(g3)
+
+    print('~ Child mutation ~')
+    for c in g3.connections:
+        print(c)
+    print()
