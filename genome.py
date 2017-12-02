@@ -16,7 +16,7 @@ from tabulate import tabulate
 Neuron = namedtuple('Neuron',
                         ['type', 'id'])
 
-Connection = namedtuple('Collection',
+Connection = namedtuple('Connection',
                         ['input', 'output', 'weight', 'enabled', 'innovation'])
 
 class Type(Enum):
@@ -367,8 +367,72 @@ def crossover(g1, g2):
 
     return child
 
-def mutate(g):
+def mutate_weights(g, chance):
+    new_connections = []
+    for connection in g.connections:
+        # roll dice to see if a mutation is made
+        if random.uniform(0,1) > (1-chance):
+            # find out what type of weight change
+            choice = random.uniform(0,1)
+
+            # new number
+            if choice < 0.25:
+                new_connections.append(Connection(connection.input,
+                                connection.output,
+                                random.uniform(-1,1),
+                                connection.enabled,
+                                connection.innovation))
+
+            # sign swap
+            elif choice >= 0.25 and choice < 0.5:
+                new_connections.append(Connection(connection.input,
+                                connection.output,
+                                -connection.weight,
+                                connection.enabled,
+                                connection.innovation))
+
+            # percentage shift positive
+            elif choice >= 0.5 and choice < 0.75:
+                shift = random.uniform(0, 0.5)
+                new_connections.append(Connection(connection.input,
+                                connection.output,
+                                connection.weight + (connection.weight * shift),
+                                connection.enabled,
+                                connection.innovation))
+
+            # percentage shift negative
+            else:
+                shift = random.uniform(0, 0.5)
+                new_connections.append(Connection(connection.input,
+                                connection.output,
+                                connection.weight - (connection.weight * shift),
+                                connection.enabled,
+                                connection.innovation))
+
+        # keep current connection
+        else:
+            new_connections.append(connection)
+    g.connections = new_connections
+
+
+def add_node(g):
     pass
+
+def add_connection(g):
+    pass
+
+def mutate(g, chance):
+    # structural versus weight
+    if random.uniform(0,1) > 0.5:
+        # roll dice to see if a mutation is made
+        if random.uniform(0,1) > (1-chance):
+            # flip a coin to see what type it is
+            if random.uniform(0,1) > 0.5:
+                add_node(g)
+            else:
+                add_connection(g)
+    else:
+        mutate_weights(g, chance)
 
 # setup parent 1
 g1 = Genome()
@@ -386,7 +450,8 @@ g1.connections.append(Connection(2,5,0.5,True,4))
 g1.connections.append(Connection(5,4,0.5,True,5))
 g1.connections.append(Connection(1,5,0.5,True,8))
 
-print(g1,'\n')
+# print('~ Parent A ~')
+# print(g1,'\n')
 
 # setup parent 2
 g2 = Genome()
@@ -408,8 +473,23 @@ g2.connections.append(Connection(6,4,0.5,True,7))
 g2.connections.append(Connection(3,5,0.5,True,9))
 g2.connections.append(Connection(1,6,0.5,True,10))
 
-print(g2,'\n')
+# print('~ Parent B ~')
+# print(g2,'\n')
 
-# crossover
+# crossover with equal fitness
 g3 = crossover(g1,g2)
-print(g3,'\n')
+# print('~ Child crossover ~')
+# print(g3,'\n')
+
+# mutate weight
+# print('~ Child Initial ~')
+# for c in g3.connections:
+#     print(c)
+# print()
+#
+# mutate_weights(g3, chance=1.0)
+#
+# print('~ Child mutation ~')
+# for c in g3.connections:
+#     print(c)
+# print()
