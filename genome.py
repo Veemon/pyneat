@@ -419,13 +419,33 @@ def mutate_weights(g, chance):
 
 # Adds a neuron to genome
 def add_node(g):
-    pass
+    g.neurons.append(Neuron(Type.HIDDEN, g.neurons[-1].id + 1))
+
+    # pick a connection and disable it
+    choice = random.choice(g.connections)
+    g.connections.remove(choice)
+    g.connections.append(Connection(choice.input,
+                    choice.output,
+                    choice.weight,
+                    False,
+                    choice.innovation))
+
+    # add a connection from input to new node
+    g.connections.append(Connection(choice.input,
+                    g.neurons[-1].id,
+                    1.0,
+                    True,
+                    0))
+
+    # add a connection from new node to output
+    g.connections.append(Connection(g.neurons[-1].id,
+                    choice.output,
+                    choice.weight,
+                    True,
+                    0))
 
 # Adds a connection to genome
 def add_connection(g):
-    # in -add connection- mutation, a single new connection gene with a random weight is added
-    # connecting two previously unconnected nodes
-
     # find already connected pairs
     connected = [[0] for x in g.neurons]
     for c in g.connections:
@@ -532,22 +552,22 @@ if False:
     print()
 
 # Test Node Mutation
-if False:
+if True:
     print('~ Child Initial ~')
-    for n in g3.neurons:
-        print(n)
+    for c in g3.connections:
+        print(c)
     print()
 
     # mutate weight
     add_node(g3)
 
     print('~ Child mutation ~')
-    for n in g3.n:
-        print(n)
+    for c in g3.connections:
+        print(c)
     print()
 
 # Test Connection Mutation
-if True:
+if False:
     print('~ Child Initial ~')
     for c in g3.connections:
         print(c)
