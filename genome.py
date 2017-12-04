@@ -324,7 +324,8 @@ class Genome:
 
 # Global innovation counter
 Innovation = 0
-Innovation_cache = []
+Connection_Cache = []
+Innovation_Cache = []
 
 # Creates offspring between two genomes
 def crossover(g1, g2):
@@ -436,6 +437,11 @@ def mutate_weights(g, chance):
 
 # Adds a neuron to genome
 def add_node(g):
+    global Innovation
+    global Innovation_Cache
+    global Connection_Cache
+
+    # grow a single neuron
     g.neurons.append(Neuron(Type.HIDDEN, g.neurons[-1].id + 1))
 
     # pick a connection and disable it
@@ -447,22 +453,46 @@ def add_node(g):
                     False,
                     choice.innovation))
 
+    # check if this connection has been grown before
+    c_temp = [choice.input, g.neurons[-1].id]
+    if c_temp in Connection_Cache:
+        this_innovation = Innovation_Cache[Connection_Cache.index(c_temp)]
+    else:
+        Innovation += 1
+        this_innovation = Innovation
+        Connection_Cache.append(c_temp)
+        Innovation_Cache.append(Innovation)
+
     # add a connection from input to new node
     g.connections.append(Connection(choice.input,
                     g.neurons[-1].id,
                     1.0,
                     True,
-                    0))
+                    this_innovation))
+
+    # check if this connection has been grown before
+    c_temp = [g.neurons[-1].id, choice.output]
+    if c_temp in Connection_Cache:
+        this_innovation = Innovation_Cache[Connection_Cache.index(c_temp)]
+    else:
+        Innovation += 1
+        this_innovation = Innovation
+        Connection_Cache.append(c_temp)
+        Innovation_Cache.append(Innovation)
 
     # add a connection from new node to output
     g.connections.append(Connection(g.neurons[-1].id,
                     choice.output,
                     choice.weight,
                     True,
-                    0))
+                    this_innovation))
 
 # Adds a connection to genome
 def add_connection(g):
+    global Innovation
+    global Innovation_Cache
+    global Connection_Cache
+
     # find already connected pairs
     connected = [[0] for x in g.neurons]
     for c in g.connections:
@@ -479,13 +509,22 @@ def add_connection(g):
             unconnected.append([g.neurons[i].id, g.neurons[j].id])
     unconnected = [x for x in unconnected if x not in connected]
 
-    # choose 1 at random TODO: add innovation
+    # check if this connection has been grown before
     new = random.choice(unconnected)
+    if new in Connection_Cache:
+        this_innovation = Innovation_Cache[Connection_Cache.index(new)]
+    else:
+        Innovation += 1
+        this_innovation = Innovation
+        Connection_Cache.append(new)
+        Innovation_Cache.append(Innovation)
+
+    # choose 1 at random
     g.connections.append(Connection(new[0],
                     new[1],
                     random.uniform(-1,1),
                     True,
-                    0))
+                    this_innovation))
 
 # High level dice-roller for mutations
 def mutate(g, chance):
@@ -500,9 +539,3 @@ def mutate(g, chance):
                 add_connection(g)
     else:
         mutate_weights(g, chance)
-
-
-
-# setup parent 1
-g1 = Genome(3, 2)
-print(g1)
