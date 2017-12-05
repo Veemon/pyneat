@@ -83,13 +83,13 @@ import numpy as np
 from genome import *
 
 # Hyper-parameters
-input_nodes = 200
+input_nodes = 100
 output_nodes = 2
 
 population_size = 10
 num_generations = 10
 
-cutoff = 0.25
+cutoff = 0.1
 mutation = 0.1
 
 logging = 1
@@ -100,12 +100,12 @@ def fitness_func(self):
     vec_in = [random.uniform(0.0,1.0) for _ in range(input_nodes)]
     vec_out = self.network.forward(vec_in)
 
-    # if sum of inputs = 4
+    # if all input nodes are active
         # output node 1 should activate
     # else
         # output node 2 should activate
 
-    if sum(vec_in) == 4:
+    if sum(vec_in) == input_nodes:
         expected = [1.0,0.0]
     else:
         expected = [0.0,1.0]
