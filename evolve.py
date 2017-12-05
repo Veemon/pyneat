@@ -161,3 +161,7 @@ for generation in range(num_generations):
         population.append(crossover(parents[i], parents[i+1]))
         mutate(population[-1], mutation)
         i += 2
+
+    # Clear Cache
+    global Innovation_Cache
+    Innovation_Cache = []
