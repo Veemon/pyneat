@@ -8,6 +8,7 @@ from math import exp
 
 # third-party library
 from tabulate import tabulate
+import numpy as np
 
 
 
@@ -251,6 +252,7 @@ class Network():
 
 
 
+
 # Global innovation counter
 Innovation = 0
 Connection_Cache = []
@@ -348,6 +350,26 @@ def crossover(g1, g2):
     # find ending of lined up genes
     innovations_1 = [x.innovation for x in g1.connections]
     innovations_2 = [x.innovation for x in g2.connections]
+
+    # FIXME
+    debug = False
+    for x in innovations_1 + innovations_2:
+        if type(x) is list:
+            debug = True
+            break
+    if debug == True:
+        print('\n - new crossover error - \n')
+        print('parent 1')
+        print(g1, '\n')
+        print('parent 2')
+        print(g2, '\n')
+
+        print('inno 1')
+        print(innovations_1, '\n')
+        print('inno 2')
+        print(innovations_2, '\n')
+        sys.exit()
+
     recurring = list(set(innovations_1).intersection(set(innovations_2)))
 
     # these lined up genes have equal chance
@@ -422,23 +444,25 @@ def mutate_weights(g, chance):
                                 connection.enabled,
                                 connection.innovation))
 
-            # percentage shift positive
+            # percentage shift
             elif choice >= 0.5 and choice < 0.75:
-                shift = random.uniform(0, 0.5)
+                shift = random.uniform(-0.5, 0.5)
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 connection.weight + (connection.weight * shift),
                                 connection.enabled,
                                 connection.innovation))
 
-            # percentage shift negative
+            # activate unactive connection
             else:
-                shift = random.uniform(0, 0.5)
-                new_connections.append(Connection(connection.input,
-                                connection.output,
-                                connection.weight - (connection.weight * shift),
-                                connection.enabled,
-                                connection.innovation))
+                disabled_connections = [x for x in g.connections if x.enabled == False]
+                if len(disabled_connections) > 0:
+                    chosen = random.choice(disabled_connections)
+                    new_connections.append(Connection(chosen.input,
+                                    chosen.output,
+                                    chosen.weight,
+                                    True,
+                                    chosen.innovation))
 
         # keep current connection
         else:
@@ -551,3 +575,114 @@ def mutate(g, chance):
                 add_connection(g)
     else:
         mutate_weights(g, chance)
+
+# Compatibility measure between two genomes
+def compatibility(g1, g2, c1, c2, c3):
+    # cache innovations
+    cache1 = [x.innovation for x in g1.connections]
+    cache2 = [x.innovation for x in g2.connections]
+
+    # get length of larger genome
+    l1 = len(cache1)
+    l2 = len(cache2)
+
+    N = l1 if l1 > l2 else l2
+    smaller_genome = cache2 if l1 > l2 else cache1
+
+    # common genes
+    common = list(set(cache1) & set(cache2))
+
+    # excess genes
+    excess1 = [c for c in cache1 if c > max(smaller_genome)]
+    excess2 = [c for c in cache2 if c > max(smaller_genome)]
+    x = c1 * ( (len(excess1) + len(excess2)) / N )
+
+    # disjoint genes
+    disjoint1 = [c for c in cache1 if c not in common and c not in excess1]
+    disjoint2 = [c for c in cache2 if c not in common and c not in excess2]
+    y = c2 * ( (len(disjoint1) + len(disjoint2)) / N )
+
+    # average weight difference
+    W = []
+    for i in range(len(common)):
+        w1 = g1.find_connection(common[i]).weight
+        w2 = g2.find_connection(common[i]).weight
+        W.append(abs(w1 - w2))
+    z = c3 * (sum(W) / len(W))
+
+    return x + y + z
+
+
+
+
+class GenePool:
+    def __init__(self, population_size, num_generations, cutoff, mutation, constants, logging=0):
+        # Evolution Params
+        self.population_size = population_size
+        self.num_generations = num_generations
+
+        # Population Cutoff
+        self.cutoff = cutoff
+
+        # Mutation Chance
+        self.mutation = mutation
+
+        # Compatibility constants
+        self.c1 = constants[0]
+        self.c2 = constants[1]
+        self.c3 = constants[2]
+
+        # Levels 0 -> 2
+        self.logging = logging
+
+        # Internals
+        self.population = []
+        self.species = []
+        self.distribution = []
+
+    def init(self, num_inputs, num_outputs, fitness_func, distribution_func):
+        # Create Population
+        for i in range(self.population_size):
+            self.population.append(Genome().init(num_inputs, num_outputs, fitness_func))
+
+        # Speciate TODO
+        self.species = []
+
+        # Calculate static distribution of reproduction chance
+        revised_size = int(self.population_size * self.cutoff)
+        distribution = [distribution_func(x) for x in range(revised_size)]
+        summation = sum(distribution)
+        self.distribution = [x/summation for x in distribution]
+
+    def evolve(self):
+        global Innovation_Cache, Connection_Cache
+        for generation in range(self.num_generations):
+            # Measure Fitness
+            for genome in self.population:
+                genome.evaluate()
+
+            # Rank them
+            self.population.sort(key=lambda x: x.fitness, reverse=True)
+
+            # logging
+            if self.logging > 0:
+                offset = ' ' * (len(str(self.num_generations)) - len(str(generation+1)))
+                print('generation {}{} | top genome: {}'.format(generation+1, offset, self.population[0].fitness))
+                if self.logging > 1:
+                    print(self.population[0], '\n')
+
+            # Eliminate Worst
+            self.population = self.population[0:int(self.population_size * self.cutoff)]
+
+            # Create offspring
+            parents = np.random.choice(self.population, self.population_size*2, p=self.distribution)
+            self.population = []
+            i = 0
+            while i < self.population_size*2:
+                self.population.append(crossover(parents[i], parents[i+1]))
+                mutate(self.population[-1], self.mutation)
+                i += 2
+
+            # Clear Cache
+            Innovation_Cache = []
+            Connection_Cache = []
