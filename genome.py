@@ -163,7 +163,7 @@ class Network():
         input_nodes = []
         output_nodes = []
         for node in self.nodes:
-            if node.type == Type.In:
+            if node.type == Type.IN:
                 input_nodes.append(node)
             elif node.type == Type.OUT:
                 output_nodes.append(node)
@@ -251,10 +251,14 @@ class Network():
 
 
 
+# Global innovation counter
+Innovation = 0
+Connection_Cache = []
+Innovation_Cache = []
 
 # Genome - Network Blueprint
 class Genome:
-    def __init__(self, num_inputs, num_outputs):
+    def __init__(self):
         # information
         self.neurons = []
         self.connections = []
@@ -262,6 +266,13 @@ class Genome:
         # measurements
         self.network = 0
         self.fitness = 0
+        self.get_fitness =  0
+
+    def init(self, num_inputs, num_outputs, fitness_function):
+        global Innovation
+
+        # activate fitness function
+        self.get_fitness = fitness_function
 
         # grow neurons
         for i in range(num_inputs):
@@ -274,7 +285,13 @@ class Genome:
             for j in range(num_outputs):
                 self.connections.append(Connection(i, num_inputs + j,
                                                     random.uniform(-1.0, 1.0),
-                                                    True, 0))
+                                                    True,
+                                                    (i*num_outputs)+j))
+
+        # update innovation
+        Innovation = num_inputs + num_outputs + 1
+
+        return self
 
     def find_neuron(self, neuron_id):
         for n in self.neurons:
@@ -292,7 +309,8 @@ class Genome:
         self.network.build()
 
     def evaluate(self):
-        pass
+        self.build()
+        self.get_fitness(self)
 
     def __str__(self):
         headers = ['Nodes', 'Connections']
@@ -322,14 +340,10 @@ class Genome:
 
         return tabulate(swizzle, headers=headers)
 
-# Global innovation counter
-Innovation = 0
-Connection_Cache = []
-Innovation_Cache = []
-
 # Creates offspring between two genomes
 def crossover(g1, g2):
     child = Genome()
+    child.get_fitness = g1.get_fitness
 
     # find ending of lined up genes
     innovations_1 = [x.innovation for x in g1.connections]
@@ -371,7 +385,7 @@ def crossover(g1, g2):
     if g1.fitness != g2.fitness:
         # inheret more fit nodes
         choice = g1 if g1.fitness > g2.fitness else g2
-        child = choice.neurons
+        child.neurons = choice.neurons[:]
     else:
         # inheret all nodes
         neurons_1 = [x.id for x in g1.neurons]
@@ -380,10 +394,6 @@ def crossover(g1, g2):
             child.neurons.append(g1.find_neuron(neuron_id))
         for neuron_id in neurons_2:
             child.neurons.append(g2.find_neuron(neuron_id))
-
-    # sort
-    child.neurons.sort(key=lambda x: x.id)
-    child.connections.sort(key=lambda x: x.innovation)
 
     return child
 
@@ -433,7 +443,9 @@ def mutate_weights(g, chance):
         # keep current connection
         else:
             new_connections.append(connection)
-    g.connections = new_connections
+
+    # assign genome's new connections
+    g.connections = new_connections[:]
 
 # Adds a neuron to genome
 def add_node(g):
