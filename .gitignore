@@ -2,3 +2,7 @@ __pycache__/
 build/
 dist/
 pyneat.egg-info/
+
+*~
+*.swp
+*.swo

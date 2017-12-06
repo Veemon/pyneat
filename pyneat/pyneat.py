@@ -77,6 +77,7 @@ import random
 import sys
 
 from collections import namedtuple
+from multiprocessing import Pool, freeze_support
 from enum import Enum
 from math import exp
 
@@ -690,7 +691,8 @@ def compatibility(g1, g2, c1, c2, c3):
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
-    def __init__(self, population_size, num_generations, cutoff, mutation, constants, logging=0):
+    def __init__(self, population_size, num_generations, cutoff, mutation, constants,
+                    logging=0, num_threads=1):
         # Evolution Params
         self.population_size = population_size
         self.num_generations = num_generations
@@ -708,6 +710,10 @@ class GenePool:
 
         # Levels 0 -> 2
         self.logging = logging
+
+        # Parallel Evaluations
+        self.num_threads = num_threads
+        self.p_pool = 0
 
         # Internals
         self.population = []
@@ -728,12 +734,23 @@ class GenePool:
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
 
+        # Initialise Process Pool
+        if self.num_threads > 1:
+            freeze_support()
+            self.p_pool = Pool(self.num_threads)
+
+    def invoke_eval(self, g):
+        g.evaluate()
+
     def evolve(self):
         global Innovation_Cache, Connection_Cache
         for generation in range(self.num_generations):
             # Measure Fitness
-            for genome in self.population:
-                genome.evaluate()
+            if self.num_threads <= 1:
+                for genome in self.population:
+                    genome.evaluate()
+            else:
+                self.p_pool.map(self.invoke_eval, self.population)
 
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)
