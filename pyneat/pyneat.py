@@ -77,7 +77,7 @@ import random
 import sys
 
 from collections import namedtuple
-from multiprocessing import Pool, freeze_support
+from multiprocessing.pool import ThreadPool
 from enum import Enum
 from math import exp
 
@@ -329,9 +329,9 @@ class Network():
 
 
 # Global innovation counter
-Innovation = 0
-Connection_Cache = []
-Innovation_Cache = []
+__Innovation_Counter = 0
+__Connection_Cache = []
+__Innovation_Cache = []
 
 # Genome - Network Blueprint
 class Genome:
@@ -346,7 +346,7 @@ class Genome:
         self.get_fitness =  0
 
     def init(self, num_inputs, num_outputs, fitness_function):
-        global Innovation
+        global __Innovation_Counter
 
         # activate fitness function
         self.get_fitness = fitness_function
@@ -366,7 +366,7 @@ class Genome:
                                                     (i*num_outputs)+j))
 
         # update innovation
-        Innovation = num_inputs + num_outputs + 1
+        __Innovation_Counter = num_inputs + num_outputs + 1
 
         return self
 
@@ -548,9 +548,9 @@ def mutate_weights(g, chance):
 
 # Adds a neuron to genome
 def add_node(g):
-    global Innovation
-    global Innovation_Cache
-    global Connection_Cache
+    global __Innovation_Counter
+    global __Innovation_Cache
+    global __Connection_Cache
 
     # grow a single neuron
     g.neurons.append(Neuron(Type.HIDDEN, g.neurons[-1].id + 1))
@@ -566,13 +566,13 @@ def add_node(g):
 
     # check if this connection has been grown before
     c_temp = [choice.input, g.neurons[-1].id]
-    if c_temp in Connection_Cache:
-        this_innovation = Innovation_Cache[Connection_Cache.index(c_temp)]
+    if c_temp in __Connection_Cache:
+        this_innovation = __Innovation_Cache[__Connection_Cache.index(c_temp)]
     else:
-        Innovation += 1
-        this_innovation = Innovation
-        Connection_Cache.append(c_temp)
-        Innovation_Cache.append(Innovation)
+        __Innovation_Counter += 1
+        this_innovation = __Innovation_Counter
+        __Connection_Cache.append(c_temp)
+        __Innovation_Cache.append(__Innovation_Counter)
 
     # add a connection from input to new node
     g.connections.append(Connection(choice.input,
@@ -583,13 +583,13 @@ def add_node(g):
 
     # check if this connection has been grown before
     c_temp = [g.neurons[-1].id, choice.output]
-    if c_temp in Connection_Cache:
-        this_innovation = Innovation_Cache[Connection_Cache.index(c_temp)]
+    if c_temp in __Connection_Cache:
+        this_innovation = __Innovation_Cache[__Connection_Cache.index(c_temp)]
     else:
-        Innovation += 1
-        this_innovation = Innovation
-        Connection_Cache.append(c_temp)
-        Innovation_Cache.append(Innovation)
+        __Innovation_Counter += 1
+        this_innovation = __Innovation_Counter
+        __Connection_Cache.append(c_temp)
+        __Innovation_Cache.append(__Innovation_Counter)
 
     # add a connection from new node to output
     g.connections.append(Connection(g.neurons[-1].id,
@@ -600,9 +600,9 @@ def add_node(g):
 
 # Adds a connection to genome
 def add_connection(g):
-    global Innovation
-    global Innovation_Cache
-    global Connection_Cache
+    global __Innovation_Counter
+    global __Innovation_Cache
+    global __Connection_Cache
 
     # find already connected pairs
     connected = [[0] for x in g.neurons]
@@ -622,13 +622,13 @@ def add_connection(g):
 
     # check if this connection has been grown before
     new = random.choice(unconnected)
-    if new in Connection_Cache:
-        this_innovation = Innovation_Cache[Connection_Cache.index(new)]
+    if new in __Connection_Cache:
+        this_innovation = __Innovation_Cache[__Connection_Cache.index(new)]
     else:
-        Innovation += 1
-        this_innovation = Innovation
-        Connection_Cache.append(new)
-        Innovation_Cache.append(Innovation)
+        __Innovation_Counter += 1
+        this_innovation = __Innovation_Counter
+        __Connection_Cache.append(new)
+        __Innovation_Cache.append(__Innovation_Counter)
 
     # choose 1 at random
     g.connections.append(Connection(new[0],
@@ -689,6 +689,21 @@ def compatibility(g1, g2, c1, c2, c3):
 
 
 
+
+# Thread Pool for Genome Evaluations
+__pyneat_thread_pool = 0
+
+# Evaluation Invoker
+def invoke_eval(g):
+    g.evaluate()
+
+# Parallel Evaluation Handler
+def p_eval(num_threads, population):
+    global __pyneat_thread_pool
+    if __pyneat_thread_pool == 0:
+        __pyneat_thread_pool = ThreadPool(num_threads)
+    __pyneat_thread_pool.map(invoke_eval, population)
+
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
     def __init__(self, population_size, num_generations, cutoff, mutation, constants,
@@ -713,7 +728,6 @@ class GenePool:
 
         # Parallel Evaluations
         self.num_threads = num_threads
-        self.p_pool = 0
 
         # Internals
         self.population = []
@@ -734,23 +748,17 @@ class GenePool:
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
 
-        # Initialise Process Pool
-        if self.num_threads > 1:
-            freeze_support()
-            self.p_pool = Pool(self.num_threads)
-
-    def invoke_eval(self, g):
-        g.evaluate()
-
     def evolve(self):
-        global Innovation_Cache, Connection_Cache
+        global __Innovation_Cache, __Connection_Cache
+
+        # Evolution
         for generation in range(self.num_generations):
             # Measure Fitness
             if self.num_threads <= 1:
                 for genome in self.population:
                     genome.evaluate()
             else:
-                self.p_pool.map(self.invoke_eval, self.population)
+                p_eval(self.num_threads, self.population)
 
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)
@@ -775,5 +783,5 @@ class GenePool:
                 i += 2
 
             # Clear Cache
-            Innovation_Cache = []
-            Connection_Cache = []
+            __Innovation_Cache = []
+            __Connection_Cache = []
