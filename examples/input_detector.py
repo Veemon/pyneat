@@ -1,30 +1,38 @@
 import os
 import sys
+import random
 
-# Relative Import
-sys.path.append(os.path.abspath(os.path.join(__file__ ,'../../')))
-from genome import *
+from math import exp
+
+from pyneat import pyneat
 
 # Experiment Params
 input_nodes = 2
 output_nodes = 2
 
-population_size = 100
+population_size = 1000
 num_generations = 100
 
 # Population cutoff percentage
-cutoff = 0.1
+cutoff = 0.15
 
 # Percentage chance to mutate
-mutation = 0.1
+mutation = 0.15
 
 # Constants used in speciation
 c1 = 1
 c2 = 1
 c3 = 1
 
+# Log Experiment Params
+print('='*30)
+print("Population Size:\t{}".format(population_size))
+print("Fitness Cutoff:\t\tTop {}%".format(int(cutoff*100)))
+print("Chance of Mutation:\t{}%".format(int(mutation*100)))
+print('='*30,'\n')
+
 # Create the gene pool
-gene_pool = GenePool(population_size,
+gene_pool = pyneat.GenePool(population_size,
                      num_generations,
                      cutoff,
                      mutation,
@@ -53,7 +61,7 @@ def fitness_func(self):
     # This network will evolve to detect if all inputs are high
     expected = []
     for x in vec_in:
-        a = [1.0,0.0] if sum(x) == input_nodes else [0.0,1.0]
+        a = [1.0,-1.0] if sum(x) == input_nodes else [-1.0,1.0]
         expected.append(a)
 
     # Fitness = the inverse loss
@@ -66,7 +74,7 @@ def fitness_func(self):
 
     # In this experiment, we have a quantifiable optimum,
     # thus we should save this particular genome.
-    if self.fitness > 0.95:
+    if self.fitness > 0.98:
         print('\n~ found optimal network: {} ~'.format(self.fitness))
 
         # Create and run 5 tests
