@@ -1,5 +1,5 @@
 '''
--crossover- TODO
+-crossover-
 
 structure -mutations- occur in two ways:
 
@@ -343,7 +343,7 @@ class Genome:
         # measurements
         self.network = 0
         self.fitness = 0
-        self.get_fitness =  0
+        self.get_fitness = 0
 
     def init(self, num_inputs, num_outputs, fitness_function):
         global __Innovation_Counter
@@ -418,6 +418,7 @@ class Genome:
         return tabulate(swizzle, headers=headers)
 
 # Creates offspring between two genomes
+# TODO: crossover bug between unequal genomes
 def crossover(g1, g2):
     child = Genome()
     child.get_fitness = g1.get_fitness
@@ -425,26 +426,6 @@ def crossover(g1, g2):
     # find ending of lined up genes
     innovations_1 = [x.innovation for x in g1.connections]
     innovations_2 = [x.innovation for x in g2.connections]
-
-    # FIXME
-    debug = False
-    for x in innovations_1 + innovations_2:
-        if type(x) is list:
-            debug = True
-            break
-    if debug == True:
-        print('\n - new crossover error - \n')
-        print('parent 1')
-        print(g1, '\n')
-        print('parent 2')
-        print(g2, '\n')
-
-        print('inno 1')
-        print(innovations_1, '\n')
-        print('inno 2')
-        print(innovations_2, '\n')
-        sys.exit()
-
     recurring = list(set(innovations_1).intersection(set(innovations_2)))
 
     # these lined up genes have equal chance
@@ -467,8 +448,14 @@ def crossover(g1, g2):
 
         # inheret
         remainder = [x for x in innovation_choice if x not in recurring]
+
         for innovation in remainder:
             child.connections.append(choice.find_connection(innovation))
+
+        # FIXME
+        if len(child.connections) < 1:
+            print('no child connections\n',choice)
+            sys.exit()
     else:
         # inherent all excess genes
         remainder_1 = [x for x in innovations_1 if x not in recurring]
@@ -546,7 +533,7 @@ def mutate_weights(g, chance):
     # assign genome's new connections
     g.connections = new_connections[:]
 
-# Adds a neuron to genome
+# Adds a neuron to genome - 
 def add_node(g):
     global __Innovation_Counter
     global __Innovation_Cache
@@ -620,6 +607,10 @@ def add_connection(g):
             unconnected.append([g.neurons[i].id, g.neurons[j].id])
     unconnected = [x for x in unconnected if x not in connected]
 
+    # safety - if fully traversable, leave
+    if len(unconnected) == 0:
+        return
+
     # check if this connection has been grown before
     new = random.choice(unconnected)
     if new in __Connection_Cache:
@@ -692,16 +683,17 @@ def compatibility(g1, g2, c1, c2, c3):
 
 # Thread Pool for Genome Evaluations
 __pyneat_thread_pool = 0
+def init_thread_pool(num_threads):
+    global __pyneat_thread_pool
+    __pyneat_thread_pool = ThreadPool(num_threads)
 
 # Evaluation Invoker
 def invoke_eval(g):
     g.evaluate()
 
 # Parallel Evaluation Handler
-def p_eval(num_threads, population):
+def p_eval(population):
     global __pyneat_thread_pool
-    if __pyneat_thread_pool == 0:
-        __pyneat_thread_pool = ThreadPool(num_threads)
     __pyneat_thread_pool.map(invoke_eval, population)
 
 # GenePool - abstraction for evoling a collection a genomes.
@@ -727,7 +719,9 @@ class GenePool:
         self.logging = logging
 
         # Parallel Evaluations
-        self.num_threads = num_threads
+        self.parallel = True if num_threads > 1 else False
+        if self.parallel == True:
+            init_thread_pool(num_threads)
 
         # Internals
         self.population = []
@@ -754,11 +748,11 @@ class GenePool:
         # Evolution
         for generation in range(self.num_generations):
             # Measure Fitness
-            if self.num_threads <= 1:
+            if self.parallel == True:
+                p_eval(self.population)
+            else:
                 for genome in self.population:
                     genome.evaluate()
-            else:
-                p_eval(self.num_threads, self.population)
 
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)

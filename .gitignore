@@ -6,3 +6,6 @@ pyneat.egg-info/
 *~
 *.swp
 *.swo
+
+.vscode/
+*.code-workspace

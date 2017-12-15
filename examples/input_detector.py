@@ -37,7 +37,8 @@ gene_pool = pyneat.GenePool(population_size,
                      cutoff,
                      mutation,
                      [c1,c2,c3],
-                     logging=1)
+                     logging=1,
+                     num_threads=8)
 
 # Define a fitness function a genome can use to evaluate itself
 def fitness_func(self):
