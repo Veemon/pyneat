@@ -1,3 +1,6 @@
+saves/
+*.save
+
 __pycache__/
 build/
 dist/

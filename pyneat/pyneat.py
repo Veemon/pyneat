@@ -100,6 +100,13 @@ class Type(Enum):
     HIDDEN = 1
     OUT = 2
 
+class Saver(Enum):
+    DISABLED = 0
+    UNBIASED_GENOME = 1
+    BIASED_GENOME = 2
+    UNBIASED_POPULATION = 3
+    BIASED_POPULATION = 4
+    USER_DEFINED = 5
 
 
 
@@ -345,6 +352,10 @@ class Genome:
         self.fitness = 0
         self.get_fitness = 0
 
+        # logging information
+        self.generation_counter = 0
+        self.save_path = 0
+
     def init(self, num_inputs, num_outputs, fitness_function):
         global __Innovation_Counter
 
@@ -384,10 +395,80 @@ class Genome:
     def build(self):
         self.network = Network(self)
         self.network.build()
+        return self
 
-    def evaluate(self):
-        self.build()
-        return self.get_fitness(self)
+    def evaluate(self, counter):
+        self.generation_counter = counter
+        return self.build().get_fitness(self)
+
+    def save(self, path):
+        self.save_path = path
+
+    def load(self, path):
+        with open(path, 'r') as f:
+            data = f.read()
+
+        start_brace = -1
+        end_brace = -1
+        args = []
+
+        # get neurons and connections
+        for i, c in enumerate(data):
+            if c == '{':
+                start_brace = i + 1
+            if c == '}':
+                end_brace = i
+            if start_brace != -1:
+                if end_brace != -1:
+                    args.append(data[start_brace:end_brace])
+                    start_brace = -1
+                    end_brace = -1
+
+        # clean
+        for i in range(len(args)):
+            args[i] = args[i].replace('\t', '')
+            args[i] = [x for x in args[i].split('\n') if len(x) > 0]
+
+        # parse neurons
+        for n in args[0]:
+            n = n.replace('[', '').replace(']', '').split(',')
+            new_neuron = Neuron( Type(int(n[0])), int(n[1]) )
+            self.neurons.append(new_neuron)
+
+        # parse connections
+        for c in args[1]:
+            c = c.replace('[', '').replace(']', '').split(',')
+            new_connection = Connection(int(c[0]),
+                                        int(c[1]),
+                                        float(c[2]),
+                                        bool(c[3]),
+                                        int(c[4]))
+            self.connections.append(new_connection)
+
+        return self
+
+    def _save_to_file(self):
+        # Get all relevant information
+        meta = [self.generation_counter, self.fitness]
+        neurons = [[n.type.value, n.id] for n in self.neurons]
+        connections = []
+        for c in self.connections:
+            str_c = [c.input, c.output, c.weight, int(c.enabled), c.innovation]
+            connections.append(str_c) 
+
+        # Stringify
+        with open(self.save_path, 'w') as f:
+            print(meta, file=f)
+            print('{', file=f)
+            print('\t{', file=f)
+            for n in neurons:
+                print('\t\t{}'.format(n), file=f)
+            print('\t}', file=f)
+            print('\t{', file=f)
+            for c in connections:
+                print('\t\t{}'.format(c), file=f)
+            print('\t}', file=f)
+            print('}', file=f)
 
     def __str__(self):
         headers = ['Nodes', 'Connections']
@@ -680,13 +761,14 @@ def init_thread_pool(num_threads):
     __pyneat_thread_pool = ThreadPool(num_threads)
 
 # Evaluation Invoker
-def invoke_eval(g):
-    return g.evaluate()
+def invoke_eval(arg):
+    return arg[0].evaluate(arg[1])
 
 # Parallel Evaluation Handler
-def p_eval(population):
+def p_eval(population, counter):
     global __pyneat_thread_pool
-    return __pyneat_thread_pool.map(invoke_eval, population)
+    args = [[p,counter] for p in population]
+    return __pyneat_thread_pool.map(invoke_eval, args)
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
@@ -734,7 +816,7 @@ class GenePool:
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
 
-    def evolve(self):
+    def evolve(self, saver=Saver.DISABLED):
         global __Innovation_Cache, __Connection_Cache
 
         # Log Experiment
@@ -748,9 +830,27 @@ class GenePool:
         for generation in range(self.num_generations):
             # Measure Fitness
             if self.parallel == True:
-                terminations = p_eval(self.population)
+                terminations = p_eval(self.population, generation)
             else:
-                terminations = [g.evaluate() for g in self.population]
+                terminations = [g.evaluate(generation) for g in self.population]
+
+            # Save genome/population
+            if saver == Saver.UNBIASED_GENOME:
+                pass
+
+            elif saver == Saver.BIASED_GENOME:
+                pass
+
+            elif saver == Saver.UNBIASED_POPULATION:
+                pass
+
+            elif saver == Saver.BIASED_POPULATION:
+                pass
+
+            elif saver == Saver.USER_DEFINED:
+                for g in self.population:
+                    if g.save_path != 0:
+                        g._save_to_file()
 
             # If terminate signal present, exit
             for term in terminations:

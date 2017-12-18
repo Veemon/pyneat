@@ -6,6 +6,13 @@ from math import exp
 
 from pyneat import pyneat
 
+# CLI Arguments
+load_save = False
+for arg in sys.argv:
+    if arg == '--load':
+        load_save = True
+
+
 # Experiment Params
 input_nodes = 2
 output_nodes = 2
@@ -24,78 +31,100 @@ c1 = 1
 c2 = 1
 c3 = 1
 
-# Create the gene pool
-gene_pool = pyneat.GenePool(population_size,
-                     num_generations,
-                     cutoff,
-                     mutation,
-                     [c1,c2,c3],
-                     logging=1,
-                     num_threads=8)
 
-# Define a fitness function a genome can use to evaluate itself
-def fitness_func(self):
-    global input_nodes
+# If we haven't already evolved a network
+if load_save == False:
+    # Create the gene pool
+    gene_pool = pyneat.GenePool(population_size,
+                        num_generations,
+                        cutoff,
+                        mutation,
+                        [c1,c2,c3],
+                        logging=1,
+                        num_threads=8)
 
-    # Remember this isn't backprop, the batch
-    # is just for evaluating loss
-    batch_size = 32
+    # Define a fitness function a genome can use to evaluate itself
+    def fitness_func(self):
+        global input_nodes
 
-    # Create a batch of random inputs
-    vec_in = []
-    for _ in range(batch_size):
-        x = []
-        for _ in range(input_nodes):
-            x.append(float(random.randint(0,1)))
-        vec_in.append(x)
+        # Remember this isn't backprop, the batch
+        # is just for evaluating loss
+        batch_size = 32
 
-    # Calculate network outputs
-    vec_out = [self.network.forward(x) for x in vec_in]
+        # Create a batch of random inputs
+        vec_in = []
+        for _ in range(batch_size):
+            x = []
+            for _ in range(input_nodes):
+                x.append(float(random.randint(0,1)))
+            vec_in.append(x)
 
-    # This network will evolve to detect if all inputs are high
-    expected = []
-    for x in vec_in:
-        a = [1.0,0.0] if sum(x) == input_nodes else [0.0,1.0]
-        expected.append(a)
+        # Calculate network outputs
+        vec_out = [self.network.forward(x) for x in vec_in]
 
-    # Fitness = the inverse loss
-    mse = []
-    for y, y_ in zip(vec_out, expected):
-        for i in range(len(y)):
-            error = (y[i] - y_[i]) ** 2
-            mse.append(error)
-    self.fitness = 1 - (sum(mse) / len(mse))
+        # This network will evolve to detect if all inputs are high
+        expected = []
+        for x in vec_in:
+            a = [1.0,0.0] if sum(x) == input_nodes else [0.0,1.0]
+            expected.append(a)
 
-    # In this experiment, we have a quantifiable optimum,
-    # thus we should save this particular genome.
-    if self.fitness > 0.98:
-        print('\n~ found optimal network: {} ~'.format(self.fitness))
+        # Fitness = the inverse loss
+        mse = []
+        for y, y_ in zip(vec_out, expected):
+            for i in range(len(y)):
+                error = (y[i] - y_[i]) ** 2
+                mse.append(error)
+        self.fitness = 1 - (sum(mse) / len(mse))
 
-        # Create and run 5 tests
-        tests = [[random.uniform(0.0,1.0) for _ in range(input_nodes)] for _ in range(5)]
-        for x in tests:
+        # In this experiment, we have a quantifiable optimum,
+        # thus we should save this particular genome.
+        if self.fitness > 0.98:
+            print('\n~ found optimal network: {} ~'.format(self.fitness))
 
-            # In this case we reset the network to ignore recurrent connections,
-            # we haven't been using them during evolution, thus we won't here.
-            self.network.reset
-            y = self.network.forward(x)
+            # Create and run 5 tests
+            tests = [[random.uniform(0.0,1.0) for _ in range(input_nodes)] for _ in range(5)]
+            for x in tests:
 
-            # Simplify the log information
-            input_text = 'all active' if sum(x) == input_nodes else 'not active'
-            output_text = str([round(x,3) for x in y])[1:-1]
-            print("{}\t{}".format(input_text, output_text))
+                # In this case we reset the network to ignore recurrent connections,
+                # we haven't been using them during evolution, thus we won't here.
+                self.network.reset()
+                y = self.network.forward(x)
 
-            # TODO: Here you'd wanna save if you have an optimal solution
+                # Simplify the log information
+                input_text = 'all active' if sum(x) == input_nodes else 'not active'
+                output_text = str([round(x,3) for x in y])[1:-1]
+                print("{}\t{}".format(input_text, output_text))
 
-        # Signal network termination, clean up threads
-        return True
+                # Save the genome information
+                self.save('saves/top.save')
 
-# Define a distribution function for parent selection
-def distribution_func(x):
-    return exp(-10 * (x / int(population_size * cutoff)))
+            # Signal network termination, clean up threads
+            return True
 
-# Initialise the gene pool
-gene_pool.init(input_nodes, output_nodes, fitness_func, distribution_func)
+    # Define a distribution function for parent selection
+    def distribution_func(x):
+        return exp(-10 * (x / int(population_size * cutoff)))
 
-# Run an evolutionary period
-gene_pool.evolve()
+    # Initialise the gene pool
+    gene_pool.init(input_nodes, output_nodes, fitness_func, distribution_func)
+
+    # Run an evolutionary period, specifying that we have defined
+    # a signal to save in the fitness function
+    gene_pool.evolve(saver=pyneat.Saver.USER_DEFINED)
+
+# If we have already evolved a network
+else:
+    # Load the genome, extract the network
+    net = pyneat.Genome().load('saves/top.save').build().network
+
+    # Run the same tests shown in the fitness function
+    tests = [[random.uniform(0.0,1.0) for _ in range(input_nodes)] for _ in range(5)]
+    for x in tests:
+        # Propagate input throughout the network
+        net.reset()
+        y = net.forward(x)
+
+        # Simplify the log information
+        input_text = 'all active' if sum(x) == input_nodes else 'not active'
+        output_text = str([round(x,3) for x in y])[1:-1]
+        print("{}\t{}".format(input_text, output_text))
