@@ -62,7 +62,7 @@ def fitness_func(self):
     # This network will evolve to detect if all inputs are high
     expected = []
     for x in vec_in:
-        a = [1.0,-1.0] if sum(x) == input_nodes else [-1.0,1.0]
+        a = [1.0,0.0] if sum(x) == input_nodes else [0.0,1.0]
         expected.append(a)
 
     # Fitness = the inverse loss
@@ -92,9 +92,10 @@ def fitness_func(self):
             output_text = str([round(x,3) for x in y])[1:-1]
             print("{}\t{}".format(input_text, output_text))
 
-            # TODO: Here you'd wanna save the best if you have a max fitness
+            # TODO: Here you'd wanna save if you have an optimal solution
 
-        sys.exit()
+        # Signal network termination, clean up threads
+        return True
 
 # Define a distribution function for parent selection
 def distribution_func(x):

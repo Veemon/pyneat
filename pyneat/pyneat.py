@@ -387,7 +387,7 @@ class Genome:
 
     def evaluate(self):
         self.build()
-        self.get_fitness(self)
+        return self.get_fitness(self)
 
     def __str__(self):
         headers = ['Nodes', 'Connections']
@@ -418,7 +418,6 @@ class Genome:
         return tabulate(swizzle, headers=headers)
 
 # Creates offspring between two genomes
-# TODO: crossover bug between unequal genomes
 def crossover(g1, g2):
     child = Genome()
     child.get_fitness = g1.get_fitness
@@ -448,14 +447,9 @@ def crossover(g1, g2):
 
         # inheret
         remainder = [x for x in innovation_choice if x not in recurring]
-
         for innovation in remainder:
             child.connections.append(choice.find_connection(innovation))
 
-        # FIXME
-        if len(child.connections) < 1:
-            print('no child connections\n',choice)
-            sys.exit()
     else:
         # inherent all excess genes
         remainder_1 = [x for x in innovations_1 if x not in recurring]
@@ -517,14 +511,12 @@ def mutate_weights(g, chance):
 
             # activate unactive connection
             else:
-                disabled_connections = [x for x in g.connections if x.enabled == False]
-                if len(disabled_connections) > 0:
-                    chosen = random.choice(disabled_connections)
-                    new_connections.append(Connection(chosen.input,
-                                    chosen.output,
-                                    chosen.weight,
+                new_connections.append(Connection(connection.input,
+                                    connection.output,
+                                    connection.weight,
                                     True,
-                                    chosen.innovation))
+                                    connection.innovation))
+
 
         # keep current connection
         else:
@@ -689,12 +681,12 @@ def init_thread_pool(num_threads):
 
 # Evaluation Invoker
 def invoke_eval(g):
-    g.evaluate()
+    return g.evaluate()
 
 # Parallel Evaluation Handler
 def p_eval(population):
     global __pyneat_thread_pool
-    __pyneat_thread_pool.map(invoke_eval, population)
+    return __pyneat_thread_pool.map(invoke_eval, population)
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
@@ -749,10 +741,14 @@ class GenePool:
         for generation in range(self.num_generations):
             # Measure Fitness
             if self.parallel == True:
-                p_eval(self.population)
+                terminations = p_eval(self.population)
             else:
-                for genome in self.population:
-                    genome.evaluate()
+                terminations = [g.evaluate() for g in self.population]
+
+            # If terminate signal present, exit
+            for term in terminations:
+                if term == True:
+                    sys.exit()
 
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)
@@ -770,10 +766,12 @@ class GenePool:
             # Create offspring
             parents = np.random.choice(self.population, self.population_size*2, p=self.distribution)
             self.population = []
+
             i = 0
-            while i < self.population_size*2:
-                self.population.append(crossover(parents[i], parents[i+1]))
-                mutate(self.population[-1], self.mutation)
+            while i < len(parents):
+                child = crossover(parents[i], parents[i+1])
+                mutate(child, self.mutation)
+                self.population.append(child)
                 i += 2
 
             # Clear Cache
