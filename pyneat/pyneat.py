@@ -737,6 +737,13 @@ class GenePool:
     def evolve(self):
         global __Innovation_Cache, __Connection_Cache
 
+        # Log Experiment
+        print(' ' * 3, '-'*35)
+        print(' ' * 5, "Population Size:\t\t{}".format(self.population_size))
+        print(' ' * 5, "Fitness Cutoff:\t\tTop {}%".format(int(self.cutoff*100)))
+        print(' ' * 5, "Chance of Mutation:\t{}%".format(int(self.mutation*100)))
+        print(' ' * 3, '-'*35,'\n')
+
         # Evolution
         for generation in range(self.num_generations):
             # Measure Fitness

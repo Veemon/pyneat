@@ -24,13 +24,6 @@ c1 = 1
 c2 = 1
 c3 = 1
 
-# Log Experiment Params
-print('='*30)
-print("Population Size:\t{}".format(population_size))
-print("Fitness Cutoff:\t\tTop {}%".format(int(cutoff*100)))
-print("Chance of Mutation:\t{}%".format(int(mutation*100)))
-print('='*30,'\n')
-
 # Create the gene pool
 gene_pool = pyneat.GenePool(population_size,
                      num_generations,
