@@ -19,6 +19,7 @@ output_nodes = 2
 
 population_size = 1000
 num_generations = 100
+num_species = 7
 
 # Population cutoff percentage
 cutoff = 0.15
@@ -27,10 +28,12 @@ cutoff = 0.15
 mutation = 0.15
 
 # Constants used in speciation
-c1 = 1
-c2 = 1
-c3 = 1
+c1 = 1.0
+c2 = 1.0
+c3 = 0.4
 
+# Speciation threshold
+sigma_t = 3.0
 
 # If we haven't already evolved a network
 if load_save == False:
@@ -40,6 +43,7 @@ if load_save == False:
                         cutoff,
                         mutation,
                         [c1,c2,c3],
+                        sigma_t,
                         logging=1,
                         num_threads=8)
 

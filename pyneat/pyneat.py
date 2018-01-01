@@ -1,77 +1,3 @@
-'''
--crossover-
-
-structure -mutations- occur in two ways:
-
-    in -add connection- mutation, a single new connection gene with a random weight is added
-    connecting two previously unconnected nodes
-
-    in the -add node- mutation, an existing connection is split and the new node placed where
-    the old connection used to be.
-        the old connection is disabled
-        the new connections are then added
-            - the new connection leading into the new node has a weight of 1
-            - the new connection leading out of the new node has the weight of the old connection
-
-whenever a new gene appears through structural mutation, a global innovation number is incremented and assigned to that gene
-
-it is possible to ensure that when the same structure arises more than once through independent mutations
-in the same generation, each identical mutation is assigned the same innovation number.
-
-when -crossover- occurs, the genes in both genomes with the same innovation numbers are lined up.
-these are called matching genes.
-
-genes that do not match are either disjoint or excess, depending on whether they occur within or outside the range of the parents
-innovation numbers.
-
-when composing offspring, genes are randomly chosen from either parent at matching genes,
-whereas all excess or disjoint genes are always included from the more fit parent.
-
-the number of excess and disjoint genes between a pair of genomes is a natural measure of their compatibility distance.
-the more disjoint two genomes are, the less evolutionary history they share, and thus the less compatibile they are.
-
-sigma = c1(E/N) + c2(D/N) + c3*W
-sigma is the compatibility difference
-c1,c2,c3 are coefficients
-E is the number of excess genes
-D is the number of disjoint genes
-W is the average weight differences of matching genes (including disable genes)
-N is the number of genes in the larger genome
-
-this compatibility difference allows for speciation, with a compatibility threshold sigma_t.
-
-in each generation genomes are sequentially placed into species.
-each existing species is represented by a random genome inside the species from the previous generation.
-
-a given genome g in the current generation is placed in the first species with which g is compatibile with
-the respective genome of that species.
-if g is not compatibile with any of the existing species, a new species is created with g as the representative.
-
-explicit fitness sharing is used, where organisms in the same species must share the fitness of their niche.
-this is to combat dominant species.
-
-the adjusted fitness for the organism is calculated according to its compatibility distance from every other organism
-in the population.
-
-f_i' = f_i / sum( sh( sigma(i,j) ) )
-f_i' is the adjusted fitness for organism i
-f_i = is the fitness for organism i
-sigma(i,j) is the compatibility distance between organisms i and j
-
-sh is the sharing function
-    it is set to 0 when the compatibility distance is above the threshold
-    otherwise it is set to 1
-
-species then reproduce by first eliminating the lowest performing members from the population.
-the entire population is then replaced by the offspring of the remaining organisms in each species.
-
-neat starts out with a uniform population of networks with zero hidden nodes.
-all inputs are directly connected to all outputs.
-'''
-
-
-
-
 # standard library
 import random
 import sys
@@ -349,8 +275,11 @@ class Genome:
 
         # measurements
         self.network = 0
-        self.fitness = 0
         self.get_fitness = 0
+        
+        self.fitness = 0
+        self.adjusted_fitness = 0
+        self.shared = []
 
         # logging information
         self.generation_counter = 0
@@ -746,7 +675,7 @@ def mutate(g, chance):
         mutate_weights(g, chance)
 
 # Compatibility measure between two genomes
-def compatibility(g1, g2, c1, c2, c3):
+def compare(g1, g2, c1, c2, c3):
     # cache innovations
     cache1 = [x.innovation for x in g1.connections]
     cache2 = [x.innovation for x in g2.connections]
@@ -802,7 +731,7 @@ def p_eval(population, counter):
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
-    def __init__(self, population_size, num_generations, cutoff, mutation, constants,
+    def __init__(self, population_size, num_generations, cutoff, mutation, constants, sigma_t,
                     logging=0, num_threads=1, path=""):
         # Evolution Params
         self.population_size = population_size
@@ -818,6 +747,7 @@ class GenePool:
         self.c1 = constants[0]
         self.c2 = constants[1]
         self.c3 = constants[2]
+        self.sigma_t = sigma_t
 
         # Levels 0 -> 2
         self.logging = logging
@@ -830,6 +760,7 @@ class GenePool:
         # Internals
         self.population = []
         self.species = []
+        self.representatives = []
         self.distribution = []
 
         self.last_top = 0
@@ -839,10 +770,7 @@ class GenePool:
         for i in range(self.population_size):
             self.population.append(Genome().init(num_inputs, num_outputs, fitness_func))
 
-        # Speciate TODO
-        self.species = []
-
-        # Calculate static distribution of reproduction chance
+        # Calculate static distribution of reproductive chance
         revised_size = int(self.population_size * self.cutoff)
         distribution = [distribution_func(x) for x in range(revised_size)]
         summation = sum(distribution)
@@ -881,6 +809,23 @@ class GenePool:
         distribution = [distribution_func(x) for x in range(revised_size)]
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
+
+    def calculate_adjusted_fitness(self):
+        # sharing function
+        sh = lambda x, s: 0 if x > s else 1
+        p = self.population
+
+        # calculate all sharing values
+        for i in range(self.population_size):
+            for j in range(i, self.population_size):
+                distance = compare(p[i], p[j], self.c1, self.c2, self.c3)
+                sharing = sh(distance, self.sigma_t)
+                p[i].shared.append(sharing)
+                p[j].shared.append(sharing)
+
+        # calculate adjusted fitness
+        for g in p:
+            g.adjusted_fitness = g.fitness / sum(g.shared)
 
     def evolve(self, saver=Saver.DISABLED, save_path='saves'):
         global __Innovation_Cache, __Connection_Cache
@@ -939,19 +884,83 @@ class GenePool:
                 if self.logging > 1:
                     print(self.population[0], '\n')
 
+            # Speciate
+            for g in self.population:
+                # initialize a species
+                if len(self.representatives) == 0:
+                    self.species.append([g])
+                    self.representatives.append(g)
+                else:
+                    # see if it belongs to a species
+                    found_species = False
+                    for i, r in enumerate(self.representatives):
+                        distance = compare(g, r, self.c1, self.c2, self.c3)
+                        if distance <= self.sigma_t:
+                            self.species[i].append(g)
+                            found_species = True
+                            break
+                    
+                    # else create a new one
+                    if found_species == False:
+                        self.species.append([g])
+                        self.representatives.append(g)
+
+            # Select new representatives
+            self.representatives = []
+            for s in self.species:
+                self.representatives.append(random.choice(s))
+
+            # Calculate the adjusted fitness
+            self.calculate_adjusted_fitness()
+
             # Eliminate Worst
-            self.population = self.population[0:int(self.population_size * self.cutoff)]
+            worst = self.population[int(self.population_size * self.cutoff):]
+            for w in worst:
+                for i in range(len(self.species)):
+                    if w in self.species[i]:
+                        self.species[i].remove(w)
+                        break
+
+            # Sum all adjusted fitness
+            fitness_total = 0
+            species_fitness = []
+            for s in self.species:
+                species_total = 0
+                for g in s:
+                    species_total += g.adjusted_fitness
+                species_fitness.append(species_total)
+                fitness_total += species_total
+
+            # Get proportions for each speciation
+            proportions = [int(fitness_total * self.population_size / x) for x in species_fitness]
+
+            # Make sure we don't under-reproduce
+            remainder = self.population_size - sum(proportions)
+            for _ in range(remainder):
+                c = random.choice(proportions)
+                i = proportions.index(c)
+                proportions[i] += 1
+
+            # Assign parents
+            parents = []
+            self.population = []
+            for i, species_proportion in enumerate(proportions):
+                for _ in range(species_proportion):
+                    for _ in range(2):
+                        p = random.choice(self.species[i])
+                        parents.append(p)
 
             # Create offspring
-            parents = np.random.choice(self.population, self.population_size*2, p=self.distribution)
-            self.population = []
-
             i = 0
             while i < len(parents):
                 child = crossover(parents[i], parents[i+1])
                 mutate(child, self.mutation)
                 self.population.append(child)
                 i += 2
+
+            # Clear Species
+            for i in range(len(self.species)):
+                self.species[i].clear()            
 
             # Clear Cache
             __Innovation_Cache = []
