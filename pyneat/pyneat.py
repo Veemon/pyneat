@@ -447,7 +447,13 @@ class Genome:
 
         return self
 
-    def _save_to_file(self):
+    def _save_to_file(self, save_path="", generation=0):
+        # Make sure no empties
+        if self.save_path == 0:
+            if save_path == "":
+                print("Error: no directory specified to save to.")
+                sys.exit()
+
         # Get all relevant information
         meta = [self.generation_counter, self.fitness]
         neurons = [[n.type.value, n.id] for n in self.neurons]
@@ -456,8 +462,14 @@ class Genome:
             str_c = [c.input, c.output, c.weight, int(c.enabled), c.innovation]
             connections.append(str_c) 
 
+        # Pathing defaults
+        if self.save_path == 0:
+            this_path = save_path + "/gen_{}".format(generation) + ".save"
+        else:
+            this_path = self.save_path
+
         # Stringify
-        with open(self.save_path, 'w') as f:
+        with open(this_path, 'w') as f:
             print(meta, file=f)
             print('{', file=f)
             print('\t{', file=f)
@@ -802,6 +814,8 @@ class GenePool:
         self.species = []
         self.distribution = []
 
+        self.last_top = 0
+
     def init(self, num_inputs, num_outputs, fitness_func, distribution_func):
         # Create Population
         for i in range(self.population_size):
@@ -816,7 +830,7 @@ class GenePool:
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
 
-    def evolve(self, saver=Saver.DISABLED):
+    def evolve(self, saver=Saver.DISABLED, save_path='saves'):
         global __Innovation_Cache, __Connection_Cache
 
         # Log Experiment
@@ -834,12 +848,17 @@ class GenePool:
             else:
                 terminations = [g.evaluate(generation) for g in self.population]
 
+            # Rank them
+            self.population.sort(key=lambda x: x.fitness, reverse=True)
+
             # Save genome/population
             if saver == Saver.UNBIASED_GENOME:
-                pass
+                self.population[0]._save_to_file(save_path=save_path, generation=generation)
 
             elif saver == Saver.BIASED_GENOME:
-                pass
+                if self.population[0].fitness >= self.last_top:
+                    self.last_top = self.population[0].fitness
+                    self.population[0]._save_to_file(save_path=save_path, generation=generation)
 
             elif saver == Saver.UNBIASED_POPULATION:
                 pass
@@ -856,9 +875,6 @@ class GenePool:
             for term in terminations:
                 if term == True:
                     sys.exit()
-
-            # Rank them
-            self.population.sort(key=lambda x: x.fitness, reverse=True)
 
             # logging
             if self.logging > 0:
