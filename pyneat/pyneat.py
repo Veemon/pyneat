@@ -902,12 +902,15 @@ class GenePool:
                 if term == True:
                     sys.exit()
 
-            # logging
+            # Logging
             if self.logging > 0:
                 offset = ' ' * (len(str(self.num_generations)) - len(str(generation+1)))
                 print('generation {}{} | top genome: {}'.format(generation+1, offset, self.population[0].fitness))
                 if self.logging > 1:
                     print(self.population[0], '\n')
+
+            # Eliminate Worst
+            self.population = self.population[:int(self.population_size * self.cutoff)]
 
             # Calculate the adjusted fitness
             if self.parallel == True:
@@ -928,6 +931,9 @@ class GenePool:
                     for i, r in enumerate(self.representatives):
                         distance = compare(g, r, self.c1, self.c2, self.c3)
                         if distance <= self.sigma_t:
+                            amt = (i+1) - len(self.species)
+                            for _ in range(amt):
+                                self.species.append([])
                             self.species[i].append(g)
                             found_species = True
                             break
@@ -942,14 +948,6 @@ class GenePool:
             for s in self.species:
                 self.representatives.append(random.choice(s))
 
-            # Eliminate Worst
-            worst = self.population[int(self.population_size * self.cutoff):]
-            for w in worst:
-                for i in range(len(self.species)):
-                    if w in self.species[i]:
-                        self.species[i].remove(w)
-                        break
-
             # Sum all adjusted fitness
             fitness_total = 0
             species_fitness = []
@@ -961,7 +959,7 @@ class GenePool:
                 fitness_total += species_total
 
             # Get proportions for each speciation
-            proportions = [int(fitness_total * self.population_size / x) for x in species_fitness]
+            proportions = [int(fitness_total * self.population_size / (x+1e16)) for x in species_fitness]
 
             # Make sure we don't under-reproduce
             remainder = self.population_size - sum(proportions)
@@ -988,8 +986,7 @@ class GenePool:
                 i += 2
 
             # Clear Species
-            for i in range(len(self.species)):
-                self.species[i].clear()            
+            self.species = []      
 
             # Clear Cache
             __Innovation_Cache = []

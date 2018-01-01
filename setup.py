@@ -10,7 +10,6 @@ setup(
     url='https://github.com/Veemon/pyneat',
     license='MIT',
     install_requires=[
-        'numpy',
         'tabulate',
         ],
     classifiers = [
