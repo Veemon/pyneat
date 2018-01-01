@@ -110,8 +110,7 @@ if load_save == False:
 
     # Run an evolutionary period, specifying that we have defined
     # a signal to save in the fitness function
-    # gene_pool.evolve(saver=pyneat.Saver.USER_DEFINED)
-    gene_pool.evolve(saver=pyneat.Saver.BIASED_GENOME)
+    gene_pool.evolve(saver=pyneat.Saver.USER_DEFINED)
 
 # If we have already evolved a network
 else:

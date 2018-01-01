@@ -404,15 +404,27 @@ class Genome:
     def save(self, path):
         self.save_path = path
 
-    def load(self, path):
-        with open(path, 'r') as f:
-            data = f.read()
+    def load(self, path, direct=""):
+        # if we have to load a file
+        if direct == "":
+            # load file
+            with open(path, 'r') as f:
+                data = f.read()
 
-        start_brace = -1
-        end_brace = -1
-        args = []
+            # separate from other genomes
+            last_char = -1
+            for i, c in enumerate(data):
+                if last_char == '\n' and c == '}':
+                    data = data[:i+1]
+                else:
+                    last_char = c
+        else:
+            data = direct
 
         # get neurons and connections
+        args = []
+        start_brace = -1
+        end_brace = -1
         for i, c in enumerate(data):
             if c == '{':
                 start_brace = i + 1
@@ -447,7 +459,7 @@ class Genome:
 
         return self
 
-    def _save_to_file(self, save_path="", generation=0):
+    def _save_to_file(self, save_path="", generation=0, append=False):
         # Make sure no empties
         if self.save_path == 0:
             if save_path == "":
@@ -468,8 +480,14 @@ class Genome:
         else:
             this_path = self.save_path
 
+        # Write/Append mode, for genome/population
+        if append == True:
+            file_mode = 'a'
+        else:
+            file_mode = 'w'
+
         # Stringify
-        with open(this_path, 'w') as f:
+        with open(this_path, file_mode) as f:
             print(meta, file=f)
             print('{', file=f)
             print('\t{', file=f)
@@ -785,7 +803,7 @@ def p_eval(population, counter):
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
     def __init__(self, population_size, num_generations, cutoff, mutation, constants,
-                    logging=0, num_threads=1):
+                    logging=0, num_threads=1, path=""):
         # Evolution Params
         self.population_size = population_size
         self.num_generations = num_generations
@@ -830,6 +848,40 @@ class GenePool:
         summation = sum(distribution)
         self.distribution = [x/summation for x in distribution]
 
+    def load(self, path, fitness_func, distribution_func):
+        # load file
+        with open(path, 'r') as f:
+            data = f.read()
+        args = []
+
+        # separate all genomes
+        while len(data) > 0:
+            last_char = -1
+            found_new_genome = False
+            for i, c in enumerate(data):
+                if last_char == '\n' and c == '}':
+                    args.append(data[:i+1])
+                    data = data[i+1:]
+                    found_new_genome = True
+                    break
+                else:
+                    last_char = c
+            if found_new_genome == False:
+                break
+
+        # create and load population
+        self.population_size = len(args)
+        for i in range(self.population_size):
+            g = Genome().load(path=0, direct=args[i])
+            g.get_fitness = fitness_func
+            self.population.append(g)
+
+        # Calculate static distribution of reproduction chance
+        revised_size = int(self.population_size * self.cutoff)
+        distribution = [distribution_func(x) for x in range(revised_size)]
+        summation = sum(distribution)
+        self.distribution = [x/summation for x in distribution]
+
     def evolve(self, saver=Saver.DISABLED, save_path='saves'):
         global __Innovation_Cache, __Connection_Cache
 
@@ -861,10 +913,14 @@ class GenePool:
                     self.population[0]._save_to_file(save_path=save_path, generation=generation)
 
             elif saver == Saver.UNBIASED_POPULATION:
-                pass
+                for g in self.population:
+                    g._save_to_file(save_path=save_path, generation=generation, append=True)
 
             elif saver == Saver.BIASED_POPULATION:
-                pass
+                if self.population[0].fitness >= self.last_top:
+                    self.last_top = self.population[0].fitness
+                    for g in self.population:
+                        g._save_to_file(save_path=save_path, generation=generation, append=True)
 
             elif saver == Saver.USER_DEFINED:
                 for g in self.population:
