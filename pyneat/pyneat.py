@@ -3,16 +3,14 @@ import random
 import sys
 
 from collections import namedtuple
-from multiprocessing.pool import ThreadPool
+from multiprocessing import Pool
+
 from enum import Enum
 from math import exp
 
 # third-party library
 from tabulate import tabulate
-import numpy as np
 
-# FIXME: remove after perf
-import time
 
 
 # Helper Abstractions
@@ -258,7 +256,6 @@ class Network():
             swizzle.append(current_node_info)
 
         return tabulate(swizzle, headers=headers, tablefmt="fancy_grid")
-
 
 
 
@@ -687,14 +684,15 @@ def compare(g1, g2, c1, c2, c3):
 
     N = l1 if l1 > l2 else l2
     smaller_genome = cache2 if l1 > l2 else cache1
+    max_smaller_genome = max(smaller_genome)
 
     # common genes
     common = list(set(cache1) & set(cache2))
 
     # excess genes
-    excess1 = [c for c in cache1 if c > max(smaller_genome)]
-    excess2 = [c for c in cache2 if c > max(smaller_genome)]
-    x = c1 * ( (len(excess1) + len(excess2)) / N )
+    excess1 = [c for c in cache1 if c > max_smaller_genome]
+    excess2 = [c for c in cache2 if c > max_smaller_genome]
+    x = c1 * ((len(excess1) + len(excess2)) / N )
 
     # disjoint genes
     disjoint1 = [c for c in cache1 if c not in common and c not in excess1]
@@ -713,12 +711,11 @@ def compare(g1, g2, c1, c2, c3):
 
 
 
-
 # Thread Pool for Genome Evaluations
 __pyneat_thread_pool = 0
 def init_thread_pool(num_threads):
     global __pyneat_thread_pool
-    __pyneat_thread_pool = ThreadPool(num_threads)
+    __pyneat_thread_pool = Pool(num_threads)
 
 # Evaluation Invoker
 def invoke_eval(arg):
@@ -733,44 +730,38 @@ def p_eval(population, counter):
 # Parallel adjusted fitness calculator
 def invoke_adjust(g):
     g.adjusted_fitness = g.fitness / sum(g.shared)
+    return g
 
 # Parallel shared term calculator
 def invoke_shared(args):
     # unpack
-    g1 = args[0]
-    g2 = args[1]
+    g = args[0]
+    pop = args[1]
     c1 = args[2]
     c2 = args[3]
     c3 = args[4]
     s = args[5]
 
-    # sharing function
-    sh = lambda x, s: 0 if x > s else 1
+    for p in pop:
+        # calculate difference and share it
+        distance = compare(g, p, c1, c2, c3)
+        shared = 0 if distance > s else 1
+        
+        # store values
+        g.shared.append(shared)
 
-    # calculate difference and share it
-    distance = compare(g1, g2, c1, c2, c3)
-    shared = sh(distance, s)
-    
-    # store values
-    g1.shared.append(shared)
-    g2.shared.append(shared)
+    return g
 
 # Parallel adjusted fitness handler
 def p_adjust(p, c1, c2, c3, s):
     global __pyneat_thread_pool
 
-    # create binary pairing list
-    args = []
-    psize = len(p)
-    for i in range(psize):
-        for j in range(i, psize):
-            args.append([p[i], p[j], c1, c2, c3, s])
-    
     # compare distances in parallel
-    __pyneat_thread_pool.map(invoke_shared, args)
+    args = [[g, p, c1, c2, c3, s] for g in p]
+    res = __pyneat_thread_pool.map(invoke_shared, args)
 
     # calculate adjusted fitness in parallel
-    __pyneat_thread_pool.map(invoke_adjust, p)
+    return __pyneat_thread_pool.map(invoke_adjust, res)
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
@@ -799,7 +790,7 @@ class GenePool:
         self.parallel = True if num_threads > 1 else False
         if self.parallel == True:
             init_thread_pool(num_threads)
-
+            
         # Internals
         self.population = []
         self.species = []
@@ -841,15 +832,14 @@ class GenePool:
             self.population.append(g)
 
     def adjust_fitness(self):
-        # sharing function
-        sh = lambda x, s: 0 if x > s else 1
+        # easy alias
         p = self.population
 
         # calculate all sharing values
         for i in range(self.population_size):
             for j in range(i, self.population_size):
                 distance = compare(p[i], p[j], self.c1, self.c2, self.c3)
-                sharing = sh(distance, self.sigma_t)
+                sharing = 0 if distance > self.sigma_t else 1
                 p[i].shared.append(sharing)
                 p[j].shared.append(sharing)
 
@@ -871,7 +861,12 @@ class GenePool:
         for generation in range(self.num_generations):
             # Measure Fitness
             if self.parallel == True:
-                terminations = p_eval(self.population, generation)
+                result = p_eval(self.population, generation)
+                terminations = []
+                self.population = []
+                for x in result:
+                    terminations.append(x[0])
+                    self.population.append(x[1])
             else:
                 terminations = [g.evaluate(generation) for g in self.population]
 
@@ -914,6 +909,13 @@ class GenePool:
                 if self.logging > 1:
                     print(self.population[0], '\n')
 
+            # Calculate the adjusted fitness
+            if self.parallel == True:
+                res = p_adjust(self.population, self.c1, self.c2, self.c3, self.sigma_t)
+                self.population = res[:]
+            else:
+                self.adjust_fitness()
+
             # Speciate
             for g in self.population:
                 # initialize a species
@@ -939,18 +941,6 @@ class GenePool:
             self.representatives = []
             for s in self.species:
                 self.representatives.append(random.choice(s))
-
-            # Calculate the adjusted fitness
-            t0 = time.time()
-            if self.parallel == True:
-                p_adjust(self.population, 
-                                self.c1, self.c2, self.c3, 
-                                self.sigma_t)
-            else:
-                self.adjust_fitness()
-            t1 = time.time()
-            print("{} seconds".format(t1-t0))
-            sys.exit()
 
             # Eliminate Worst
             worst = self.population[int(self.population_size * self.cutoff):]
