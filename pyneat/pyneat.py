@@ -11,7 +11,8 @@ from math import exp
 from tabulate import tabulate
 import numpy as np
 
-
+# FIXME: remove after perf
+import time
 
 
 # Helper Abstractions
@@ -729,6 +730,48 @@ def p_eval(population, counter):
     args = [[p,counter] for p in population]
     return __pyneat_thread_pool.map(invoke_eval, args)
 
+# Parallel adjusted fitness calculator
+def invoke_adjust(g):
+    g.adjusted_fitness = g.fitness / sum(g.shared)
+
+# Parallel shared term calculator
+def invoke_shared(args):
+    # unpack
+    g1 = args[0]
+    g2 = args[1]
+    c1 = args[2]
+    c2 = args[3]
+    c3 = args[4]
+    s = args[5]
+
+    # sharing function
+    sh = lambda x, s: 0 if x > s else 1
+
+    # calculate difference and share it
+    distance = compare(g1, g2, c1, c2, c3)
+    shared = sh(distance, s)
+    
+    # store values
+    g1.shared.append(shared)
+    g2.shared.append(shared)
+
+# Parallel adjusted fitness handler
+def p_adjust(p, c1, c2, c3, s):
+    global __pyneat_thread_pool
+
+    # create binary pairing list
+    args = []
+    psize = len(p)
+    for i in range(psize):
+        for j in range(i, psize):
+            args.append([p[i], p[j], c1, c2, c3, s])
+    
+    # compare distances in parallel
+    __pyneat_thread_pool.map(invoke_shared, args)
+
+    # calculate adjusted fitness in parallel
+    __pyneat_thread_pool.map(invoke_adjust, p)
+
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
     def __init__(self, population_size, num_generations, cutoff, mutation, constants, sigma_t,
@@ -761,22 +804,15 @@ class GenePool:
         self.population = []
         self.species = []
         self.representatives = []
-        self.distribution = []
 
         self.last_top = 0
 
-    def init(self, num_inputs, num_outputs, fitness_func, distribution_func):
+    def init(self, num_inputs, num_outputs, fitness_func):
         # Create Population
         for i in range(self.population_size):
             self.population.append(Genome().init(num_inputs, num_outputs, fitness_func))
 
-        # Calculate static distribution of reproductive chance
-        revised_size = int(self.population_size * self.cutoff)
-        distribution = [distribution_func(x) for x in range(revised_size)]
-        summation = sum(distribution)
-        self.distribution = [x/summation for x in distribution]
-
-    def load(self, path, fitness_func, distribution_func):
+    def load(self, path, fitness_func):
         # load file
         with open(path, 'r') as f:
             data = f.read()
@@ -804,13 +840,7 @@ class GenePool:
             g.get_fitness = fitness_func
             self.population.append(g)
 
-        # Calculate static distribution of reproduction chance
-        revised_size = int(self.population_size * self.cutoff)
-        distribution = [distribution_func(x) for x in range(revised_size)]
-        summation = sum(distribution)
-        self.distribution = [x/summation for x in distribution]
-
-    def calculate_adjusted_fitness(self):
+    def adjust_fitness(self):
         # sharing function
         sh = lambda x, s: 0 if x > s else 1
         p = self.population
@@ -911,7 +941,16 @@ class GenePool:
                 self.representatives.append(random.choice(s))
 
             # Calculate the adjusted fitness
-            self.calculate_adjusted_fitness()
+            t0 = time.time()
+            if self.parallel == True:
+                p_adjust(self.population, 
+                                self.c1, self.c2, self.c3, 
+                                self.sigma_t)
+            else:
+                self.adjust_fitness()
+            t1 = time.time()
+            print("{} seconds".format(t1-t0))
+            sys.exit()
 
             # Eliminate Worst
             worst = self.population[int(self.population_size * self.cutoff):]

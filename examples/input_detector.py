@@ -19,13 +19,12 @@ output_nodes = 2
 
 population_size = 1000
 num_generations = 100
-num_species = 7
 
 # Population cutoff percentage
 cutoff = 0.15
 
 # Percentage chance to mutate
-mutation = 0.15
+mutation = 0.2
 
 # Constants used in speciation
 c1 = 1.0
@@ -45,7 +44,7 @@ if load_save == False:
                         [c1,c2,c3],
                         sigma_t,
                         logging=1,
-                        num_threads=8)
+                        num_threads=4)
 
     # Define a fitness function a genome can use to evaluate itself
     def fitness_func(self):
@@ -105,12 +104,8 @@ if load_save == False:
             # Signal network termination, clean up threads
             return True
 
-    # Define a distribution function for parent selection
-    def distribution_func(x):
-        return exp(-10 * (x / int(population_size * cutoff)))
-
     # Initialise the gene pool
-    gene_pool.init(input_nodes, output_nodes, fitness_func, distribution_func)
+    gene_pool.init(input_nodes, output_nodes, fitness_func)
 
     # Run an evolutionary period, specifying that we have defined
     # a signal to save in the fitness function
