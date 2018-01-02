@@ -914,10 +914,12 @@ class GenePool:
 
             # Calculate the adjusted fitness
             if self.parallel == True:
-                res = p_adjust(self.population, self.c1, self.c2, self.c3, self.sigma_t)
-                self.population = res[:]
+                self.population = p_adjust(self.population, self.c1, self.c2, self.c3, self.sigma_t)
             else:
                 self.adjust_fitness()
+
+            # Initialize species container
+            self.species = [[] for _ in range(len(self.representatives))]
 
             # Speciate
             for g in self.population:
@@ -931,9 +933,6 @@ class GenePool:
                     for i, r in enumerate(self.representatives):
                         distance = compare(g, r, self.c1, self.c2, self.c3)
                         if distance <= self.sigma_t:
-                            amt = (i+1) - len(self.species)
-                            for _ in range(amt):
-                                self.species.append([])
                             self.species[i].append(g)
                             found_species = True
                             break
@@ -942,6 +941,9 @@ class GenePool:
                     if found_species == False:
                         self.species.append([g])
                         self.representatives.append(g)
+
+            # Remove dead species
+            self.species = list(filter(None, self.species))
 
             # Select new representatives
             self.representatives = []
@@ -984,9 +986,6 @@ class GenePool:
                 mutate(child, self.mutation)
                 self.population.append(child)
                 i += 2
-
-            # Clear Species
-            self.species = []      
 
             # Clear Cache
             __Innovation_Cache = []
