@@ -10,7 +10,7 @@ To get an idea of what I mean by user focused, refer to the example code:
 *examples/input_detector.py*
 
 ## Install
-To install simply run install.sh.
+To install simply run *install.sh* .
 
 ## Basic Usage
 The basic workflow is as follows.

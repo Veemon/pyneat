@@ -867,6 +867,7 @@ class GenePool:
                 for x in result:
                     terminations.append(x[0])
                     self.population.append(x[1])
+                result.clear()
             else:
                 terminations = [g.evaluate(generation) for g in self.population]
 
@@ -874,33 +875,35 @@ class GenePool:
             self.population.sort(key=lambda x: x.fitness, reverse=True)
 
             # Save genome/population
-            if saver == Saver.UNBIASED_GENOME:
-                self.population[0]._save_to_file(save_path=save_path, generation=generation)
-
-            elif saver == Saver.BIASED_GENOME:
-                if self.population[0].fitness >= self.last_top:
-                    self.last_top = self.population[0].fitness
+            if saver != Saver.DISABLED:
+                if saver == Saver.UNBIASED_GENOME:
                     self.population[0]._save_to_file(save_path=save_path, generation=generation)
 
-            elif saver == Saver.UNBIASED_POPULATION:
-                for g in self.population:
-                    g._save_to_file(save_path=save_path, generation=generation, append=True)
+                elif saver == Saver.BIASED_GENOME:
+                    if self.population[0].fitness >= self.last_top:
+                        self.last_top = self.population[0].fitness
+                        self.population[0]._save_to_file(save_path=save_path, generation=generation)
 
-            elif saver == Saver.BIASED_POPULATION:
-                if self.population[0].fitness >= self.last_top:
-                    self.last_top = self.population[0].fitness
+                elif saver == Saver.UNBIASED_POPULATION:
                     for g in self.population:
                         g._save_to_file(save_path=save_path, generation=generation, append=True)
 
-            elif saver == Saver.USER_DEFINED:
-                for g in self.population:
-                    if g.save_path != 0:
-                        g._save_to_file()
+                elif saver == Saver.BIASED_POPULATION:
+                    if self.population[0].fitness >= self.last_top:
+                        self.last_top = self.population[0].fitness
+                        for g in self.population:
+                            g._save_to_file(save_path=save_path, generation=generation, append=True)
+
+                elif saver == Saver.USER_DEFINED:
+                    for g in self.population:
+                        if g.save_path != 0:
+                            g._save_to_file()
 
             # If terminate signal present, exit
             for term in terminations:
                 if term == True:
                     sys.exit()
+            terminations.clear()
 
             # Logging
             if self.logging > 0:
@@ -942,6 +945,9 @@ class GenePool:
                         self.species.append([g])
                         self.representatives.append(g)
 
+            # Clearing to be safe
+            self.population.clear()
+
             # Remove dead species
             self.species = list(filter(None, self.species))
 
@@ -972,7 +978,6 @@ class GenePool:
 
             # Assign parents
             parents = []
-            self.population = []
             for i, species_proportion in enumerate(proportions):
                 for _ in range(species_proportion):
                     for _ in range(2):
