@@ -37,7 +37,8 @@ class Saver(Enum):
 
 # Activation Functions
 def sigmoid(x):
-    return 2 / (1 + exp(-4.9*x)) - 1
+    exponent = exp(-4.9*x) if x < 10 else 0
+    return 2 / (1 + exponent) - 1
 
 def relu(x):
     return x if x > 0 else 0
@@ -659,18 +660,15 @@ def add_connection(g):
                     this_innovation))
 
 # High level dice-roller for mutations
-def mutate(g, chance):
-    # structural versus weight
-    if random.uniform(0,1) > 0.5:
-        # roll dice to see if a mutation is made
-        if random.uniform(0,1) > (1-chance):
-            # flip a coin to see what type it is
-            if random.uniform(0,1) > 0.5:
-                add_node(g)
-            else:
-                add_connection(g)
-    else:
-        mutate_weights(g, chance)
+def mutate(g, weight_chance, structure_chance):
+    # roll dice to see if a structural mutation is made
+    if random.uniform(0,1) > (1-structure_chance):
+        # flip a coin to see what type it is
+        if random.uniform(0,1) > 0.5:
+            add_node(g)
+        else:
+            add_connection(g)
+    mutate_weights(g, weight_chance)
 
 # Compatibility measure between two genomes
 def compare(g1, g2, c1, c2, c3):
@@ -765,7 +763,7 @@ def p_adjust(p, c1, c2, c3, s):
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
-    def __init__(self, population_size, num_generations, cutoff, mutation, constants, sigma_t,
+    def __init__(self, population_size, num_generations, cutoff, constants, sigma_t,
                     logging=0, num_threads=1, path=""):
         # Evolution Params
         self.population_size = population_size
@@ -773,9 +771,6 @@ class GenePool:
 
         # Population Cutoff
         self.cutoff = cutoff
-
-        # Mutation Chance
-        self.mutation = mutation
 
         # Compatibility constants
         self.c1 = constants[0]
@@ -836,8 +831,9 @@ class GenePool:
         p = self.population
 
         # calculate all sharing values
-        for i in range(self.population_size):
-            for j in range(i, self.population_size):
+        pop_size = len(p)
+        for i in range(pop_size):
+            for j in range(i, pop_size):
                 distance = compare(p[i], p[j], self.c1, self.c2, self.c3)
                 sharing = 0 if distance > self.sigma_t else 1
                 p[i].shared.append(sharing)
@@ -847,19 +843,21 @@ class GenePool:
         for g in p:
             g.adjusted_fitness = g.fitness / sum(g.shared)
 
-    def evolve(self, saver=Saver.DISABLED, save_path='saves'):
+    def evolve(self, weight_chance, structure_chance, saver=Saver.DISABLED, save_path='saves'):
         global __Innovation_Cache, __Connection_Cache
 
         # Log Experiment
         print(' ' * 3, '-'*35)
-        print(' ' * 5, "Population Size:\t\t{}".format(self.population_size))
-        print(' ' * 5, "Fitness Cutoff:\t\tTop {}%".format(int(self.cutoff*100)))
-        print(' ' * 5, "Chance of Mutation:\t{}%".format(int(self.mutation*100)))
+        print(' ' * 5, "Population Size         {}".format(self.population_size))
+        print(' ' * 5, "Fitness Cutoff          Top {}%".format(int(self.cutoff*100)))
+        print(' ' * 5, "Structural Mutation     {}%".format(int(structure_chance*100)))
+        print(' ' * 5, "Weight Mutation         {}%".format(int(weight_chance*100)))
         print(' ' * 3, '-'*35,'\n')
 
         # Evolution
         for generation in range(self.num_generations):
             # Measure Fitness
+            generation_avg = 0
             if self.parallel == True:
                 result = p_eval(self.population, generation)
                 terminations = []
@@ -867,9 +865,14 @@ class GenePool:
                 for x in result:
                     terminations.append(x[0])
                     self.population.append(x[1])
+                    generation_avg += x[1].fitness
                 result.clear()
             else:
-                terminations = [g.evaluate(generation) for g in self.population]
+                terminations = []
+                for g in self.population:
+                    terminations.append(g.evaluate(generation))
+                    generation_avg += g.fitness
+            generation_avg /= self.population_size
 
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)
@@ -907,8 +910,11 @@ class GenePool:
 
             # Logging
             if self.logging > 0:
+                # calculate padding offset
                 offset = ' ' * (len(str(self.num_generations)) - len(str(generation+1)))
-                print('generation {}{} | top genome: {}'.format(generation+1, offset, self.population[0].fitness))
+                
+                # log information
+                print('generation {}{} | top: {:.5f}  avg: {:.5f}'.format(generation+1, offset, self.population[0].fitness, generation_avg))
                 if self.logging > 1:
                     print(self.population[0], '\n')
 
@@ -988,7 +994,7 @@ class GenePool:
             i = 0
             while i < len(parents):
                 child = crossover(parents[i], parents[i+1])
-                mutate(child, self.mutation)
+                mutate(child, weight_chance, structure_chance)
                 self.population.append(child)
                 i += 2
 

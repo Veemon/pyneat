@@ -22,8 +22,9 @@ num_generations = 100
 # Population cutoff percentage
 cutoff = 0.15
 
-# Percentage chance to mutate
-mutation = 0.2
+# Percentage chance to mutate:
+structure_mutation = 0.2
+weight_mutation = 0.8
 
 # Constants used in speciation
 c1 = 1.0
@@ -106,7 +107,6 @@ if load_save == False:
         gene_pool = pyneat.GenePool(population_size,
                             num_generations,
                             cutoff,
-                            mutation,
                             [c1,c2,c3],
                             sigma_t,
                             logging=1,
@@ -117,7 +117,7 @@ if load_save == False:
 
         # Run an evolutionary period, specifying that we have defined
         # a signal to save in the fitness function
-        gene_pool.evolve(saver=pyneat.Saver.USER_DEFINED)
+        gene_pool.evolve(weight_mutation, structure_mutation, saver=pyneat.Saver.USER_DEFINED)
 
 # If we have already evolved a network
 else:
