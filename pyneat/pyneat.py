@@ -37,8 +37,12 @@ class Saver(Enum):
 
 # Activation Functions
 def sigmoid(x):
-    exponent = exp(-4.9*x) if x < 10 else 0
-    return 2 / (1 + exponent) - 1
+    if x > 3:
+        return 1.0
+    elif x < -3:
+        return -1.0
+    else:
+        return 2 / (1 + exp(-4.9*x)) - 1
 
 def relu(x):
     return x if x > 0 else 0
