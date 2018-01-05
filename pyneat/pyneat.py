@@ -528,7 +528,7 @@ def mutate_weights(g, chance):
             choice = random.uniform(0,1)
 
             # new number
-            if choice < 0.25:
+            if choice < 0.1:
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 random.uniform(-1,1),
@@ -536,7 +536,7 @@ def mutate_weights(g, chance):
                                 connection.innovation))
 
             # sign swap
-            elif choice >= 0.25 and choice < 0.5:
+            elif choice >= 0.1 and choice < 0.35:
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 -connection.weight,
@@ -544,8 +544,8 @@ def mutate_weights(g, chance):
                                 connection.innovation))
 
             # percentage shift
-            elif choice >= 0.5 and choice < 0.75:
-                shift = random.uniform(-0.5, 0.5)
+            elif choice >= 0.35 and choice < 0.85:
+                shift = random.uniform(-0.05, 0.05)
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 connection.weight + (connection.weight * shift),
