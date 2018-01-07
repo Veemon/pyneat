@@ -1,6 +1,8 @@
 # standard library
+import inspect
 import random
 import sys
+import os
 
 from collections import namedtuple
 from multiprocessing import Pool
@@ -24,6 +26,7 @@ class Type(Enum):
     IN = 0
     HIDDEN = 1
     OUT = 2
+    BIAS = 3
 
 class Saver(Enum):
     DISABLED = 0
@@ -111,7 +114,10 @@ class Node():
         if len(self.cache) >= self.input_counter and self.ready == False:
 
             # forward our output to all nodes
-            output = sigmoid(sum(self.cache))
+            if self.type == Type.BIAS:
+                output = 1.0
+            else:
+                output = sigmoid(sum(self.cache))
             for i, node in enumerate(self.output_nodes):
                 node.cache.append(output * self.weights[i])
                 node.input_counter += 1
@@ -265,9 +271,9 @@ class Network():
 
 
 # Global innovation counter
-__Innovation_Counter = 0
-__Connection_Cache = []
-__Innovation_Cache = []
+_Innovation_Counter = 0
+_Connection_Cache = []
+_Innovation_Cache = []
 
 # Genome - Network Blueprint
 class Genome:
@@ -289,7 +295,7 @@ class Genome:
         self.save_path = 0
 
     def init(self, num_inputs, num_outputs, fitness_function):
-        global __Innovation_Counter
+        global _Innovation_Counter
 
         # activate fitness function
         self.get_fitness = fitness_function
@@ -299,6 +305,9 @@ class Genome:
             self.neurons.append(Neuron(Type.IN, i))
         for i in range(num_outputs):
             self.neurons.append(Neuron(Type.OUT, num_inputs + i))
+        
+        # add a bias
+        self.neurons.append(Neuron(Type.BIAS, num_inputs + num_outputs))
 
         # grow connections
         for i in range(num_inputs):
@@ -309,7 +318,7 @@ class Genome:
                                                     (i*num_outputs)+j))
 
         # update innovation
-        __Innovation_Counter = num_inputs + num_outputs + 1
+        _Innovation_Counter = num_inputs + num_outputs + 1
 
         return self
 
@@ -337,6 +346,10 @@ class Genome:
         self.save_path = path
 
     def load(self, path, direct=""):
+        if not os.path.exists(path):
+            print("The path specified does not exist.\nAre you sure you've trained?")
+            sys.exit()
+
         # if we have to load a file
         if direct == "":
             # load file
@@ -398,6 +411,22 @@ class Genome:
                 print("Error: no directory specified to save to.")
                 sys.exit()
 
+        # Pathing defaults
+        if self.save_path == 0:
+            this_path = save_path + "/gen_{}".format(generation) + ".save"
+        else:
+            this_path = self.save_path
+
+        # Create path if not available
+        if not os.path.exists(this_path.split('/')[0]):
+            os.makedirs(this_path.split('/')[0])
+
+        # Write/Append mode, for genome/population
+        if append == True:
+            file_mode = 'a'
+        else:
+            file_mode = 'w'
+
         # Get all relevant information
         meta = [self.generation_counter, self.fitness]
         neurons = [[n.type.value, n.id] for n in self.neurons]
@@ -405,18 +434,6 @@ class Genome:
         for c in self.connections:
             str_c = [c.input, c.output, c.weight, int(c.enabled), c.innovation]
             connections.append(str_c) 
-
-        # Pathing defaults
-        if self.save_path == 0:
-            this_path = save_path + "/gen_{}".format(generation) + ".save"
-        else:
-            this_path = self.save_path
-
-        # Write/Append mode, for genome/population
-        if append == True:
-            file_mode = 'a'
-        else:
-            file_mode = 'w'
 
         # Stringify
         with open(this_path, file_mode) as f:
@@ -528,7 +545,7 @@ def mutate_weights(g, chance):
             choice = random.uniform(0,1)
 
             # new number
-            if choice < 0.1:
+            if choice < 0.2:
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 random.uniform(-1,1),
@@ -536,23 +553,23 @@ def mutate_weights(g, chance):
                                 connection.innovation))
 
             # sign swap
-            elif choice >= 0.1 and choice < 0.35:
+            elif choice >= 0.2 and choice < 0.4:
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 -connection.weight,
                                 connection.enabled,
                                 connection.innovation))
 
-            # percentage shift
-            elif choice >= 0.35 and choice < 0.85:
-                shift = random.uniform(-0.05, 0.05)
+            # shift
+            elif choice >= 0.4 and choice < 0.8:
+                shift = random.uniform(-0.3, 0.3)
                 new_connections.append(Connection(connection.input,
                                 connection.output,
                                 connection.weight + (connection.weight * shift),
                                 connection.enabled,
                                 connection.innovation))
 
-            # activate unactive connection
+            # activate activate connection
             else:
                 new_connections.append(Connection(connection.input,
                                     connection.output,
@@ -570,9 +587,9 @@ def mutate_weights(g, chance):
 
 # Adds a neuron to genome - 
 def add_node(g):
-    global __Innovation_Counter
-    global __Innovation_Cache
-    global __Connection_Cache
+    global _Innovation_Counter
+    global _Innovation_Cache
+    global _Connection_Cache
 
     # grow a single neuron
     g.neurons.append(Neuron(Type.HIDDEN, g.neurons[-1].id + 1))
@@ -588,13 +605,13 @@ def add_node(g):
 
     # check if this connection has been grown before
     c_temp = [choice.input, g.neurons[-1].id]
-    if c_temp in __Connection_Cache:
-        this_innovation = __Innovation_Cache[__Connection_Cache.index(c_temp)]
+    if c_temp in _Connection_Cache:
+        this_innovation = _Innovation_Cache[_Connection_Cache.index(c_temp)]
     else:
-        __Innovation_Counter += 1
-        this_innovation = __Innovation_Counter
-        __Connection_Cache.append(c_temp)
-        __Innovation_Cache.append(__Innovation_Counter)
+        _Innovation_Counter += 1
+        this_innovation = _Innovation_Counter
+        _Connection_Cache.append(c_temp)
+        _Innovation_Cache.append(_Innovation_Counter)
 
     # add a connection from input to new node
     g.connections.append(Connection(choice.input,
@@ -605,13 +622,13 @@ def add_node(g):
 
     # check if this connection has been grown before
     c_temp = [g.neurons[-1].id, choice.output]
-    if c_temp in __Connection_Cache:
-        this_innovation = __Innovation_Cache[__Connection_Cache.index(c_temp)]
+    if c_temp in _Connection_Cache:
+        this_innovation = _Innovation_Cache[_Connection_Cache.index(c_temp)]
     else:
-        __Innovation_Counter += 1
-        this_innovation = __Innovation_Counter
-        __Connection_Cache.append(c_temp)
-        __Innovation_Cache.append(__Innovation_Counter)
+        _Innovation_Counter += 1
+        this_innovation = _Innovation_Counter
+        _Connection_Cache.append(c_temp)
+        _Innovation_Cache.append(_Innovation_Counter)
 
     # add a connection from new node to output
     g.connections.append(Connection(g.neurons[-1].id,
@@ -622,9 +639,9 @@ def add_node(g):
 
 # Adds a connection to genome
 def add_connection(g):
-    global __Innovation_Counter
-    global __Innovation_Cache
-    global __Connection_Cache
+    global _Innovation_Counter
+    global _Innovation_Cache
+    global _Connection_Cache
 
     # find already connected pairs
     connected = [[0] for x in g.neurons]
@@ -648,13 +665,13 @@ def add_connection(g):
 
     # check if this connection has been grown before
     new = random.choice(unconnected)
-    if new in __Connection_Cache:
-        this_innovation = __Innovation_Cache[__Connection_Cache.index(new)]
+    if new in _Connection_Cache:
+        this_innovation = _Innovation_Cache[_Connection_Cache.index(new)]
     else:
-        __Innovation_Counter += 1
-        this_innovation = __Innovation_Counter
-        __Connection_Cache.append(new)
-        __Innovation_Cache.append(__Innovation_Counter)
+        _Innovation_Counter += 1
+        this_innovation = _Innovation_Counter
+        _Connection_Cache.append(new)
+        _Innovation_Cache.append(_Innovation_Counter)
 
     # choose 1 at random
     g.connections.append(Connection(new[0],
@@ -714,10 +731,10 @@ def compare(g1, g2, c1, c2, c3):
 
 
 # Thread Pool for Genome Evaluations
-__pyneat_thread_pool = 0
+_pyneat_thread_pool = 0
 def init_thread_pool(num_threads):
-    global __pyneat_thread_pool
-    __pyneat_thread_pool = Pool(num_threads)
+    global _pyneat_thread_pool
+    _pyneat_thread_pool = Pool(num_threads)
 
 # Evaluation Invoker
 def invoke_eval(arg):
@@ -725,9 +742,9 @@ def invoke_eval(arg):
 
 # Parallel Evaluation Handler
 def p_eval(population, counter):
-    global __pyneat_thread_pool
+    global _pyneat_thread_pool
     args = [[p,counter] for p in population]
-    return __pyneat_thread_pool.map(invoke_eval, args)
+    return _pyneat_thread_pool.map(invoke_eval, args)
 
 # Parallel adjusted fitness calculator
 def invoke_adjust(g):
@@ -756,14 +773,14 @@ def invoke_shared(args):
 
 # Parallel adjusted fitness handler
 def p_adjust(p, c1, c2, c3, s):
-    global __pyneat_thread_pool
+    global _pyneat_thread_pool
 
     # compare distances in parallel
     args = [[g, p, c1, c2, c3, s] for g in p]
-    res = __pyneat_thread_pool.map(invoke_shared, args)
+    res = _pyneat_thread_pool.map(invoke_shared, args)
 
     # calculate adjusted fitness in parallel
-    return __pyneat_thread_pool.map(invoke_adjust, res)
+    return _pyneat_thread_pool.map(invoke_adjust, res)
 
 # GenePool - abstraction for evoling a collection a genomes.
 class GenePool:
@@ -792,8 +809,12 @@ class GenePool:
             
         # Internals
         self.population = []
-        self.species = []
-        self.representatives = []
+
+        self.keys = []
+        self.species = {}
+        self.representatives = {}
+        self.species_top = {}
+        self.stagnation_counter = {}
 
         self.last_top = 0
 
@@ -803,6 +824,10 @@ class GenePool:
             self.population.append(Genome().init(num_inputs, num_outputs, fitness_func))
 
     def load(self, path, fitness_func):
+        if not os.path.exists(path):
+            print("The path specified does not exist.\nAre you sure you've trained?")
+            sys.exit()
+
         # load file
         with open(path, 'r') as f:
             data = f.read()
@@ -848,7 +873,46 @@ class GenePool:
             g.adjusted_fitness = g.fitness / sum(g.shared)
 
     def evolve(self, weight_chance, structure_chance, saver=Saver.DISABLED, save_path='saves'):
-        global __Innovation_Cache, __Connection_Cache
+        global _Innovation_Cache, _Connection_Cache
+
+        # Init check
+        if len(self.population) == 0:
+            print("Empty population, you might want to")
+            print("  -  run GenePool.init()")
+            print("  -  run GenePool.load() with a save file")
+            print("  -  make sure your population size is a bit higher.")
+            sys.exit()
+
+        # Meta: Warn if no saver
+        if saver == Saver.DISABLED:
+            _fn_lines = inspect.getsourcelines(self.population[0].get_fitness)
+            _fn_lines = "".join(_fn_lines[0])
+            idx = _fn_lines.find("self.save(")
+            if idx != -1:
+                snippet = _fn_lines[idx-100:idx+100]
+                idx = snippet.find("self.save(")
+
+                # trim to n newlines before
+                n_newlines = 0
+                for i in range(len(snippet) - (len(snippet) - idx)):
+                    if snippet[idx-i] == '\n':
+                        if n_newlines < 3:
+                            n_newlines += 1
+                        else:
+                            snippet = snippet[idx-i+1:]
+
+                # trim to n newlines after
+                n_newlines = 0
+                for i in range(len(snippet) - idx):
+                    if snippet[idx+i] == '\n':
+                        if n_newlines < 3:
+                            n_newlines += 1
+                        else:
+                            snippet = snippet[:idx+i]
+
+                print("\nWARNING: Detected usage of save with the saver disabled.\n")
+                print(snippet)
+                sys.exit()
 
         # Log Experiment
         print(' ' * 3, '-'*35)
@@ -877,9 +941,13 @@ class GenePool:
                     terminations.append(g.evaluate(generation))
                     generation_avg += g.fitness
             generation_avg /= self.population_size
-
+                        
             # Rank them
             self.population.sort(key=lambda x: x.fitness, reverse=True)
+
+            # Logging Stats
+            if self.logging == 3:
+                pop_min = self.population[-1].fitness
 
             # Save genome/population
             if saver != Saver.DISABLED:
@@ -912,16 +980,6 @@ class GenePool:
                     sys.exit()
             terminations.clear()
 
-            # Logging
-            if self.logging > 0:
-                # calculate padding offset
-                offset = ' ' * (len(str(self.num_generations)) - len(str(generation+1)))
-                
-                # log information
-                print('generation {}{} | top: {:.5f}  avg: {:.5f}'.format(generation+1, offset, self.population[0].fitness, generation_avg))
-                if self.logging > 1:
-                    print(self.population[0], '\n')
-
             # Eliminate Worst
             self.population = self.population[:int(self.population_size * self.cutoff)]
 
@@ -931,68 +989,138 @@ class GenePool:
             else:
                 self.adjust_fitness()
 
-            # Initialize species container
-            self.species = [[] for _ in range(len(self.representatives))]
-
             # Speciate
             for g in self.population:
-                # initialize a species
-                if len(self.representatives) == 0:
-                    self.species.append([g])
-                    self.representatives.append(g)
-                else:
-                    # see if it belongs to a species
-                    found_species = False
-                    for i, r in enumerate(self.representatives):
-                        distance = compare(g, r, self.c1, self.c2, self.c3)
-                        if distance <= self.sigma_t:
-                            self.species[i].append(g)
-                            found_species = True
-                            break
-                    
-                    # else create a new one
-                    if found_species == False:
-                        self.species.append([g])
-                        self.representatives.append(g)
+                # see if it belongs to a species
+                found_species = False
+                for key, r in self.representatives.items():
+                    distance = compare(g, r, self.c1, self.c2, self.c3)
+                    if distance <= self.sigma_t:
+                        self.species[key].append(g)
+                        found_species = True
+                        break
 
-            # Clearing to be safe
-            self.population.clear()
+                # else create a new one
+                if found_species == False:
+                    # init keychain
+                    if len(self.keys) == 0:
+                        self.keys.append(0)
+                    else:
+                        self.keys.append(self.keys[-1] + 1)
 
-            # Remove dead species
-            self.species = list(filter(None, self.species))
+                    # create new species
+                    new_key = str(self.keys[-1])
+                    self.species[new_key] = [g]
+                    self.representatives[new_key] = g
+
+                    # init champion holder
+                    self.species_top[new_key] = g.fitness
+                    self.stagnation_counter[new_key] = 0
+
+            # Logging
+            if self.logging > 0:
+                # calculate padding offset
+                offset = ' ' * (len(str(self.num_generations)) - len(str(generation+1)))
+                
+                # log information
+                if self.logging == 1:
+                    print('generation {}{} | top: {:.5f}'.format(generation+1, offset, self.population[0].fitness, generation_avg))
+                elif self.logging == 2:
+                    print('generation {}{} | {} species | top: {:.5f}'.format(generation+1, offset, len(self.species), self.population[0].fitness))
+                elif self.logging == 3:
+                    print('generation {}{} | {} species | max: {:.3f}  avg: {:.3f}  min: {:.3f}'.format(generation+1, offset, len(self.species), self.population[0].fitness, generation_avg, pop_min))
+
+            # check if a species has stagnated a generation
+            for x in self.keys:
+                key = str(x)
+                if len(self.species[key]) > 0:
+                    s = self.species[key]
+                    if self.species_top[key] < s[0].fitness:
+                        self.species_top[key] = s[0].fitness
+                        self.stagnation_counter[key] = 0
+                    else:
+                        self.stagnation_counter[key] += 1
+
+            # Dead species cleaner
+            dead_keys = []
+            for x in self.keys:
+                key = str(x)
+                if len(self.species[key]) == 0:
+                    self.species.pop(key)
+                    self.representatives.pop(key)
+                    self.species_top.pop(key)
+                    self.stagnation_counter.pop(key)
+                    dead_keys.append(x)
+            
+            # Stagnation cleaner
+            for x in self.keys:
+                # Make sure we dont genocide the population
+                if x not in dead_keys and len(self.species) > 1:
+                    key = str(x)
+                    if self.stagnation_counter[key] >= 15:
+                        self.species.pop(key)
+                        self.representatives.pop(key)
+                        self.species_top.pop(key)
+                        self.stagnation_counter.pop(key)
+                        dead_keys.append(x)
+
+            for x in dead_keys:
+                self.keys.remove(x)
+
+            for x in self.keys:
+                key = str(x)
+                if len(self.species[key]) == 0:
+                    print(last_species_cache)
+                    print(self.species)
+                    print('\n\n')
+                    print(self.representatives)
+                    print('\n\n')
+                    print(self.species_top)
+                    sys.exit()
 
             # Select new representatives
-            self.representatives = []
-            for s in self.species:
-                self.representatives.append(random.choice(s))
+            for key, s in self.species.items():
+                self.representatives[key] = random.choice(s)
 
             # Sum all adjusted fitness
             fitness_total = 0
-            species_fitness = []
-            for s in self.species:
+            species_fitness = {}
+            for key, s in self.species.items():
                 species_total = 0
                 for g in s:
                     species_total += g.adjusted_fitness
-                species_fitness.append(species_total)
+                species_fitness[key] = species_total
                 fitness_total += species_total
-
+            
             # Get proportions for each speciation
-            proportions = [int(fitness_total * self.population_size / (x+1e16)) for x in species_fitness]
+            proportions = {}
+            current_pop_target = self.population_size - len(self.species)
+            for key, x in species_fitness.items():
+                proportions[key] = int((x / fitness_total) * current_pop_target)
 
             # Make sure we don't under-reproduce
-            remainder = self.population_size - sum(proportions)
+            remainder = current_pop_target - sum(proportions.values())
             for _ in range(remainder):
-                c = random.choice(proportions)
-                i = proportions.index(c)
-                proportions[i] += 1
+                c = random.choice(self.keys)
+                proportions[str(c)] += 1
 
             # Assign parents
             parents = []
-            for i, species_proportion in enumerate(proportions):
+            for key, species_proportion in proportions.items():
                 for _ in range(species_proportion):
-                    for _ in range(2):
-                        p = random.choice(self.species[i])
-                        parents.append(p)
+                    p1 = random.choice(self.species[key])
+                    p2 = random.choice(self.population)
+                    parents.append(p1)
+                    parents.append(p2)
+
+            # Acquire champions
+            self.population.clear()
+            for key, s in self.species.items():
+                self.population.append(s[0])
+
+            # Clear species
+            for key in self.keys:
+                self.species[str(key)].clear()
 
             # Create offspring
             i = 0
@@ -1003,5 +1131,5 @@ class GenePool:
                 i += 2
 
             # Clear Cache
-            __Innovation_Cache = []
-            __Connection_Cache = []
+            _Innovation_Cache.clear()
+            _Connection_Cache.clear()
