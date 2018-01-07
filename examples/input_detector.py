@@ -16,26 +16,26 @@ for arg in sys.argv:
 input_nodes = 2
 output_nodes = 2
 
-population_size = 1000
+population_size = 150
 num_generations = 100
 
 # Population cutoff percentage
-cutoff = 0.15
+cutoff = 0.45
 
 # Percentage chance to mutate:
-structure_mutation = 0.2
-weight_mutation = 0.8
+structure_mutation = 0.025
+weight_mutation = 0.75
 
 # Constants used in speciation
 c1 = 1.0
 c2 = 1.0
-c3 = 0.4
+c3 = 2.5
 
 # Speciation threshold
 sigma_t = 3.0
 
 # Define a fitness function a genome can use to evaluate itself
-# Note: remember to keep this in scope of a fork.
+# Note: this needs to be in scope of a fork.
 def fitness_func(self):
     global input_nodes
 
@@ -70,8 +70,9 @@ def fitness_func(self):
 
     # In this experiment, we have a quantifiable optimum,
     # thus we should save this particular genome.
-    if self.fitness > 0.98:
+    if self.fitness > 0.95:
         print('\n~ found optimal network: {} ~'.format(self.fitness))
+        print(self)
 
         # Create and run 5 tests
         tests = [[random.uniform(0.0,1.0) for _ in range(input_nodes)] for _ in range(5)]
@@ -109,7 +110,7 @@ if load_save == False:
                             cutoff,
                             [c1,c2,c3],
                             sigma_t,
-                            logging=1,
+                            logging=2,
                             num_threads=8)
 
         # Initialise the gene pool
