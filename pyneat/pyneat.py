@@ -1072,19 +1072,10 @@ class GenePool:
                         self.stagnation_counter.pop(key)
                         dead_keys.append(x)
 
+            # Handle dead keys
             for x in dead_keys:
                 self.keys.remove(x)
-
-            for x in self.keys:
-                key = str(x)
-                if len(self.species[key]) == 0:
-                    print(last_species_cache)
-                    print(self.species)
-                    print('\n\n')
-                    print(self.representatives)
-                    print('\n\n')
-                    print(self.species_top)
-                    sys.exit()
+            dead_keys.clear()
 
             # Select new representatives
             for key, s in self.species.items():
