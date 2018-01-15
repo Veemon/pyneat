@@ -322,6 +322,13 @@ class Genome:
 
         return self
 
+    def reset(self):
+        self.fitness = 0
+        self.adjusted_fitness = 0
+        self.shared.clear()
+        self.network.reset()
+        return self
+
     def find_neuron(self, neuron_id):
         for n in self.neurons:
             if n.id == neuron_id:
@@ -334,8 +341,9 @@ class Genome:
                 return c
 
     def build(self):
-        self.network = Network(self)
-        self.network.build()
+        if self.network == 0:
+            self.network = Network(self)
+            self.network.build()
         return self
 
     def evaluate(self, counter):
@@ -1116,7 +1124,7 @@ class GenePool:
             # Acquire champions
             self.population.clear()
             for key, s in self.species.items():
-                self.population.append(s[0])
+                self.population.append(s[0].reset())
 
             # Clear species
             for key in self.keys:
